@@ -1,10 +1,18 @@
-import React, { useState } from "react";
-import { View, Text, TextInput, Button, StyleSheet, ScrollView } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Text, TextInput, Button, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import QRCode from "react-native-qrcode-svg";
-import { addAsset } from "../api/assets";
+import { addAsset, getAsset } from "../api/assets";
 import { Asset } from "../types/Asset";
+import { RouteProp, useRoute } from "@react-navigation/native";
+
+type RootStackParamList = {
+  AddAsset: { assetId?: string };
+};
 
 export default function AddAsset() {
+  const route = useRoute<RouteProp<RootStackParamList, "AddAsset">>();
+  const { assetId } = route.params || {};
+
   const [asset, setAsset] = useState<Asset>({
     id: "",
     nombre: "",
@@ -17,21 +25,44 @@ export default function AddAsset() {
 
   const [savedAsset, setSavedAsset] = useState<Asset | null>(null);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loadingAsset, setLoadingAsset] = useState(false);
 
-  // Función para actualizar campos
+  // 🔹 Cargar activo si viene assetId
+  useEffect(() => {
+    const fetchAsset = async () => {
+      if (!assetId) return;
+      setLoadingAsset(true);
+      try {
+        const existing = await getAsset(assetId);
+        if (existing) {
+          setAsset(existing);
+          setSavedAsset(existing);
+          setMessage(`Activo cargado (ID: ${existing.id})`);
+          console.log("✅ Activo cargado:", existing);
+        } else {
+          setMessage("⚠️ No se encontró el activo especificado.");
+        }
+      } catch (error) {
+        console.error("❌ Error cargando activo:", error);
+        setMessage("Error al cargar activo.");
+      } finally {
+        setLoadingAsset(false);
+      }
+    };
+
+    fetchAsset();
+  }, [assetId]);
+
+  // 🔹 Actualizar campos
   const handleChange = (field: keyof Asset, value: string) => {
     setAsset({ ...asset, [field]: value });
   };
 
-  // Función para guardar activo
+  // 🔹 Guardar activo (crea o actualiza)
   const handleSave = async () => {
-    console.log("LOG  Botón guardar presionado");
-    console.log("LOG  Guardando activo:", asset);
-
-    if (!asset.id) {
-      setMessage("❌ El ID del activo es obligatorio.");
-      return;
-    }
+    setLoading(true);
+    setMessage("");
 
     try {
       const assetToSave: Asset = {
@@ -39,34 +70,51 @@ export default function AddAsset() {
         fechaRegistro: new Date().toISOString(),
       };
 
-      await addAsset(assetToSave);
+      const newId = await addAsset(assetToSave); // devuelve ID si es nuevo
+      const saved = { ...assetToSave, id: newId };
 
-      setSavedAsset(assetToSave);
-      setMessage("✅ Activo guardado correctamente.");
+      setSavedAsset(saved);
+      setMessage(assetId ? "✅ Activo actualizado correctamente." : "✅ Activo creado correctamente.");
 
-      // Limpiar formulario
-      setAsset({
-        id: "",
-        nombre: "",
-        categoria: "",
-        estado: "",
-        ubicacion: "",
-        fechaAdquisicion: new Date().toISOString().split("T")[0],
-        fechaRegistro: new Date().toISOString(),
-      });
+      // Si era nuevo, limpiar los campos
+      if (!assetId) {
+        setAsset({
+          id: "",
+          nombre: "",
+          categoria: "",
+          estado: "",
+          ubicacion: "",
+          fechaAdquisicion: new Date().toISOString().split("T")[0],
+          fechaRegistro: new Date().toISOString(),
+        });
+      }
 
-      console.log("LOG  Guardado exitoso en Firestore");
+      console.log("💾 Guardado exitoso:", saved);
     } catch (error: any) {
       setMessage("❌ Error al guardar: " + error.message);
       console.error("Error guardando activo:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
+  if (loadingAsset) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text>Cargando activo...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Registrar Activo</Text>
+      <Text style={styles.title}>
+        {assetId ? "Editar Activo" : "Registrar Activo"}
+      </Text>
 
-      {["id", "nombre", "categoria", "estado", "ubicacion"].map((field) => (
+      {/* Campos del formulario */}
+      {["nombre", "categoria", "estado", "ubicacion"].map((field) => (
         <TextInput
           key={field}
           placeholder={field}
@@ -76,11 +124,21 @@ export default function AddAsset() {
         />
       ))}
 
-      <Button title="Guardar" onPress={handleSave} />
+      <Button
+        title={loading ? "Guardando..." : assetId ? "Actualizar" : "Guardar"}
+        onPress={handleSave}
+        disabled={loading}
+      />
 
-      {/* Mensaje */}
+      {/* Mensaje de estado */}
       {message !== "" && (
-        <Text style={{ marginTop: 10, fontSize: 16, color: savedAsset ? "green" : "red" }}>
+        <Text
+          style={{
+            marginTop: 10,
+            fontSize: 16,
+            color: message.startsWith("✅") ? "green" : "red",
+          }}
+        >
           {message}
         </Text>
       )}
@@ -88,7 +146,7 @@ export default function AddAsset() {
       {/* QR del activo guardado */}
       {savedAsset && (
         <View style={{ alignItems: "center", marginTop: 20 }}>
-          <Text>QR del activo:</Text>
+          <Text>QR del activo (ID: {savedAsset.id})</Text>
           <QRCode value={savedAsset.id} size={200} />
         </View>
       )}
@@ -98,6 +156,11 @@ export default function AddAsset() {
 
 const styles = StyleSheet.create({
   container: { padding: 20 },
-  input: { borderWidth: 1, marginBottom: 8, padding: 8, borderRadius: 5 },
-  title: { fontSize: 20, marginBottom: 10 },
+  input: {
+    borderWidth: 1,
+    marginBottom: 8,
+    padding: 8,
+    borderRadius: 5,
+  },
+  title: { fontSize: 20, marginBottom: 10, fontWeight: "600" },
 });
