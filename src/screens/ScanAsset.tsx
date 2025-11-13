@@ -5,14 +5,18 @@ import type { BarcodeScanningResult } from "expo-camera";
 import { StackNavigationProp } from "@react-navigation/stack";
 
 import { Asset } from "../types/Asset";
-import { addAsset, getAsset } from "../api/assets";
+import { getAsset } from "../api/assets";
 
 type RootStackParamList = {
-  AddAsset: { assetId?: string };
+  AddAsset: { assetId?: number };
   ScanAsset: undefined;
+  AssetDetail: { assetId: number };
 };
 
-type ScanAssetScreenNavigationProp = StackNavigationProp<RootStackParamList, "ScanAsset">;
+type ScanAssetScreenNavigationProp = StackNavigationProp<
+  RootStackParamList,
+  "ScanAsset"
+>;
 
 type Props = {
   navigation: ScanAssetScreenNavigationProp;
@@ -25,9 +29,7 @@ export default function ScanAsset({ navigation }: Props) {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!permission) {
-      requestPermission();
-    }
+    if (!permission) requestPermission();
   }, [permission]);
 
   const handleBarCodeScanned = async ({ data }: BarcodeScanningResult) => {
@@ -36,12 +38,9 @@ export default function ScanAsset({ navigation }: Props) {
     setMessage("Procesando QR...");
 
     try {
-      // Limpiamos el dato leído (puede ser un ID o cualquier texto)
       const qrValue = String(data).trim();
-
       console.log("🔍 Escaneado:", qrValue);
 
-      // 1️⃣ Intentamos buscar si existe un activo con ese ID (solo si es numérico)
       let existente: Asset | null = null;
 
       if (!isNaN(Number(qrValue))) {
@@ -49,27 +48,12 @@ export default function ScanAsset({ navigation }: Props) {
       }
 
       if (existente) {
-        console.log("✅ Activo existente encontrado:", existente.id);
+        console.log("✅ Activo encontrado:", existente.id);
         setMessage(`Activo encontrado: ${existente.nombre}`);
         navigation.navigate("AddAsset", { assetId: existente.id });
       } else {
-        console.log("🆕 QR no corresponde a activo existente. Creando nuevo...");
-
-        const nuevoActivo: Asset = {
-          id: "", // se genera automáticamente en addAsset()
-          nombre: "Activo escaneado",
-          categoria: "General",
-          estado: "Disponible",
-          ubicacion: "Sin asignar",
-          fechaAdquisicion: new Date().toISOString().split("T")[0],
-          fechaRegistro: new Date().toISOString(),
-        };
-
-        const nuevoId = await addAsset(nuevoActivo);
-        console.log("✅ Activo nuevo creado con ID automático:", nuevoId);
-
-        setMessage(`Activo nuevo creado (ID: ${nuevoId})`);
-        navigation.navigate("AddAsset", { assetId: nuevoId });
+        console.log("❌ QR no corresponde a ningún activo.");
+        setMessage("Este QR no está asociado a ningún activo.");
       }
     } catch (error) {
       console.error("❌ Error al procesar QR:", error);
@@ -79,13 +63,8 @@ export default function ScanAsset({ navigation }: Props) {
     }
   };
 
-  if (!permission) {
-    return <Text>Solicitando permiso de cámara...</Text>;
-  }
-
-  if (!permission.granted) {
-    return <Text>No se concedió acceso a la cámara.</Text>;
-  }
+  if (!permission) return <Text>Solicitando permiso de cámara...</Text>;
+  if (!permission.granted) return <Text>No se concedió acceso a la cámara.</Text>;
 
   return (
     <View style={styles.container}>
@@ -94,13 +73,10 @@ export default function ScanAsset({ navigation }: Props) {
           style={StyleSheet.absoluteFillObject}
           facing="back"
           onBarcodeScanned={handleBarCodeScanned}
-          barcodeScannerSettings={{
-            barcodeTypes: ["qr"],
-          }}
+          barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
         />
       )}
 
-      {/* Estado visual */}
       {loading && (
         <View style={styles.overlay}>
           <ActivityIndicator size="large" color="#fff" />
@@ -126,9 +102,7 @@ export default function ScanAsset({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#00000088",
