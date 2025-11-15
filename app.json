@@ -21,10 +21,16 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.gokudouglas.gestionactivos"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c3133fb0-ae20-4bc2-b07d-0eeecf0bb0e8"
+      }
     }
   }
 }
