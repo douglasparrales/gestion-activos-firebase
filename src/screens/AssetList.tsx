@@ -14,6 +14,9 @@ import { Asset } from "../types/Asset";
 import { getAllAssets } from "../api/assets";
 import { Ionicons } from "@expo/vector-icons";
 
+// 📌 Importar la función exportExcel
+import { exportAssetsToExcel } from "../utils/exportExcel";
+
 type NavProp = StackNavigationProp<RootStackParamList, "AssetList">;
 
 export default function AssetList() {
@@ -76,6 +79,15 @@ export default function AssetList() {
 
   return (
     <View style={{ flex: 1 }}>
+      {/* 📌 BOTÓN EXPORTAR EXCEL */}
+      <TouchableOpacity
+        style={styles.exportButton}
+        onPress={() => exportAssetsToExcel(assets)}
+
+      >
+        <Ionicons name="document-text-outline" size={26} color="white" />
+      </TouchableOpacity>
+
       <FlatList
         data={assets}
         keyExtractor={(item) => String(item.id)}
@@ -87,13 +99,28 @@ export default function AssetList() {
 }
 
 /* ======================================================
-   🎨 ESTILOS MEJORADOS — premium style
+   🎨 ESTILOS ORIGINALES + Botón exportar
 ====================================================== */
 const styles = StyleSheet.create({
   loader: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+
+  /* 🔹 Botón flotante exportar */
+  exportButton: {
+    position: "absolute",
+    top: 15,
+    right: 15,
+    backgroundColor: "#007AFF",
+    padding: 12,
+    borderRadius: 30,
+    zIndex: 999,
+    elevation: 4,
+    shadowColor: "#007AFF",
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 3 }
   },
 
   /* Tarjeta del activo */
