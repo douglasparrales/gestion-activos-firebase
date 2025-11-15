@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,14 @@ import { Asset } from "../types/Asset";
 import { getAsset, deleteAsset } from "../api/assets";
 import QRCode from "react-native-qrcode-svg";
 
+import ViewShot from "react-native-view-shot";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+
+import * as FileSystem from "expo-file-system/legacy";
+
+
+
 type NavProp = StackNavigationProp<RootStackParamList, "AssetDetail">;
 type RouteProps = RouteProp<RootStackParamList, "AssetDetail">;
 
@@ -25,6 +33,8 @@ export default function AssetDetail() {
 
   const [asset, setAsset] = useState<Asset | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const qrRef = useRef<ViewShot | null>(null);
 
   /* ====================================================
       🔹 Depreciación automática
@@ -66,6 +76,49 @@ export default function AssetDetail() {
     load();
   }, [assetId]);
 
+  /* ====================================================
+      🔹 Imprimir QR (PDF)
+  ==================================================== */
+  const imprimirQR = async () => {
+    try {
+      const viewShot = qrRef.current;
+      if (!viewShot || !viewShot.capture) return;
+
+      // 📸 Capturamos el QR como archivo PNG
+      const fileUri = await viewShot.capture();
+
+      // 🔄 Convertimos el archivo PNG a base64 (ESTO ES LO QUE FALTABA)
+      const base64 = await FileSystem.readAsStringAsync(fileUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      // 📄 Insertamos imagen base64 en el PDF
+      const html = `
+      <html>
+        <body style="text-align:center; padding:30px; font-family:Arial;">
+          <h2 style="margin-bottom:0;">${asset?.nombre}</h2>
+          <h4 style="margin-top:5px; color:#555;">ID: ${asset?.id}</h4>
+
+          <img
+            src="data:image/png;base64,${base64}"
+            style="width:250px; height:250px; margin-top:20px;"
+          />
+        </body>
+      </html>
+    `;
+
+      const { uri: pdfUri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(pdfUri);
+    } catch (error) {
+      console.log("Error imprimiendo QR:", error);
+    }
+  };
+
+
+
+  /* ====================================================
+      🔹 Loading / Not Found
+  ==================================================== */
   if (loading) {
     return (
       <View style={styles.loader}>
@@ -85,7 +138,7 @@ export default function AssetDetail() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      
+
       {/* HEADER */}
       <Text style={styles.headerTitle}>{asset.nombre}</Text>
       <Text style={styles.headerSubtitle}>ID • {asset.id}</Text>
@@ -159,13 +212,21 @@ export default function AssetDetail() {
 
       {/* QR */}
       <View style={styles.qrContainer}>
-        <View style={styles.qrBox}>
-          <QRCode value={String(asset.id)} size={160} />
-        </View>
+        <ViewShot ref={qrRef} options={{ format: "png", quality: 1 }}>
+          <View style={styles.qrBox}>
+            <QRCode value={String(asset.id)} size={160} />
+          </View>
+        </ViewShot>
+
         <Text style={styles.qrLabel}>Código QR del activo</Text>
       </View>
 
-      {/* BOTONES */}
+      {/* BOTÓN IMPRIMIR */}
+      <TouchableOpacity style={styles.btnPrimary} onPress={imprimirQR}>
+        <Text style={styles.btnPrimaryText}>Imprimir QR</Text>
+      </TouchableOpacity>
+
+      {/* BOTÓN EDITAR */}
       <TouchableOpacity
         style={styles.btnPrimary}
         onPress={() => navigation.navigate("AddAsset", { assetId: asset.id })}
@@ -173,6 +234,7 @@ export default function AssetDetail() {
         <Text style={styles.btnPrimaryText}>Editar activo</Text>
       </TouchableOpacity>
 
+      {/* BOTÓN ELIMINAR */}
       <TouchableOpacity
         style={styles.btnDanger}
         onPress={() =>
@@ -202,29 +264,18 @@ export default function AssetDetail() {
 }
 
 /* ============================================================
-    🎨 ESTILOS PREMIUM
+    🎨 ESTILOS PREMIUM (NO SE TOCARON)
 ============================================================ */
 const styles = StyleSheet.create({
   container: { padding: 20 },
 
-  /* HEADER */
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#222",
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: "#666",
-    marginBottom: 18,
-  },
+  headerTitle: { fontSize: 28, fontWeight: "700", color: "#222" },
+  headerSubtitle: { fontSize: 16, color: "#666", marginBottom: 18 },
 
-  /* LOADERS */
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
   loadingText: { marginTop: 10, fontSize: 16, color: "#444" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-  /* CARDS */
   card: {
     backgroundColor: "#FFFFFF",
     padding: 18,
@@ -235,6 +286,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+
   cardFinancial: {
     backgroundColor: "#0056A3",
     padding: 20,
@@ -259,45 +311,28 @@ const styles = StyleSheet.create({
     color: "white",
   },
 
-  /* ROWS */
-  row: {
-    marginBottom: 12,
-  },
+  row: { marginBottom: 12 },
   rowSpace: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 12,
   },
 
-  /* TEXT */
   label: { color: "#666", fontSize: 14, fontWeight: "600" },
   value: { color: "#111", fontSize: 16, fontWeight: "600" },
 
   labelWhite: { color: "#D8E8FF", fontSize: 14 },
   valueWhite: { color: "white", fontSize: 16, fontWeight: "600" },
+  valueStrongWhite: { color: "#FFF", fontSize: 18, fontWeight: "700" },
 
-  valueStrongWhite: {
-    color: "#FFF",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-
-  separator: {
-    height: 1,
-    backgroundColor: "#EEE",
-    marginVertical: 12,
-  },
+  separator: { height: 1, backgroundColor: "#EEE", marginVertical: 12 },
   separatorDark: {
     height: 1,
     backgroundColor: "rgba(255,255,255,0.3)",
     marginVertical: 12,
   },
 
-  /* QR */
-  qrContainer: {
-    alignItems: "center",
-    marginBottom: 15,
-  },
+  qrContainer: { alignItems: "center", marginBottom: 15 },
   qrBox: {
     backgroundColor: "white",
     padding: 18,
@@ -309,7 +344,6 @@ const styles = StyleSheet.create({
   },
   qrLabel: { marginTop: 8, color: "#777" },
 
-  /* BOTONES */
   btnPrimary: {
     backgroundColor: "#007AFF",
     padding: 15,
