@@ -11,6 +11,12 @@ type RootStackParamList = {
   AddAsset: { assetId?: number };
   ScanAsset: undefined;
   AssetDetail: { assetId: number };
+
+  // ✔ necesario para navegar al tab "Activos"
+  Activos: {
+    screen: "AddAsset" | "AssetList" | "AssetDetail";
+    params?: any;
+  };
 };
 
 type ScanAssetScreenNavigationProp = StackNavigationProp<
@@ -50,7 +56,13 @@ export default function ScanAsset({ navigation }: Props) {
       if (existente) {
         console.log("✅ Activo encontrado:", existente.id);
         setMessage(`Activo encontrado: ${existente.nombre}`);
-        navigation.navigate("AddAsset", { assetId: existente.id });
+
+        // ✔ NAVEGACIÓN CORRECTA HACIA EL STACK
+        navigation.navigate("Activos", {
+          screen: "AddAsset",
+          params: { assetId: existente.id },
+        });
+
       } else {
         console.log("❌ QR no corresponde a ningún activo.");
         setMessage("Este QR no está asociado a ningún activo.");

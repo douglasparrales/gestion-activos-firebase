@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,13 +9,19 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { Ionicons } from "@expo/vector-icons";
 
 import { addAsset, getAsset } from "../api/assets";
 import { Asset } from "../types/Asset";
-import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
+import {
+  RouteProp,
+  useRoute,
+  useNavigation,
+  useFocusEffect,
+} from "@react-navigation/native";
 
 type RootStackParamList = {
   AddAsset: { assetId?: number };
@@ -45,9 +51,30 @@ export default function AddAsset() {
   const [loading, setLoading] = useState(false);
   const [loadingAsset, setLoadingAsset] = useState(false);
 
-  /* ============================================================
-      🔹 Cargar activo si se edita
-  ============================================================ */
+  const [showUpdatedMessage, setShowUpdatedMessage] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const showUpdateToast = () => {
+    setShowUpdatedMessage(true);
+
+    Animated.sequence([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.delay(1500),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setShowUpdatedMessage(false));
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!assetId) {
+        setAsset(initialState);
+        setSavedAsset(null);
+        setMessage("");
+        setErrors({});
+      }
+    }, [assetId])
+  );
+
   useEffect(() => {
     const fetchAsset = async () => {
       if (!assetId) return;
@@ -70,9 +97,6 @@ export default function AddAsset() {
     fetchAsset();
   }, [assetId]);
 
-  /* ============================================================
-      🔹 Validaciones profesionales
-  ============================================================ */
   const validate = () => {
     const newErrors: any = {};
 
@@ -105,9 +129,6 @@ export default function AddAsset() {
     });
   };
 
-  /* ============================================================
-      🔹 Guardar activo
-  ============================================================ */
   const handleSave = async () => {
     setMessage("");
 
@@ -122,13 +143,19 @@ export default function AddAsset() {
       };
 
       const newId = await addAsset(assetToSave);
-
       const saved = { ...assetToSave, id: newId };
 
       setSavedAsset(saved);
-      setAsset(initialState); // limpiar formulario
-      setMessage("✅ Activo guardado correctamente");
 
+      if (assetId) {
+        showUpdateToast();
+      }
+
+      if (!assetId) {
+        setAsset(initialState);
+      }
+
+      setMessage("✅ Activo guardado correctamente");
     } finally {
       setLoading(false);
     }
@@ -144,104 +171,69 @@ export default function AddAsset() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.title}>
-          {assetId ? "Editar Activo" : "Registrar Activo"}
-        </Text>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
 
-        {/* Mostrar ID guardado */}
+        {/* 🔹 MENSAJE MOVIDO ARRIBA DEL TODO (Profesional) */}
         {savedAsset && (
-          <View style={styles.idBoxSaved}>
+          <View style={styles.topInfoBox}>
             <Ionicons name="checkmark-circle" size={22} color="#2ECC71" />
-            <Text style={styles.idSavedText}>
+            <Text style={styles.topInfoText}>
               Activo guardado con ID: {savedAsset.id}
             </Text>
           </View>
         )}
 
-        {/* Inputs premium */}
-        <Input
-          label="Nombre"
-          value={asset.nombre}
-          error={errors.nombre}
-          onChange={(v) => handleChange("nombre", v)}
-        />
+        <Text style={styles.title}>
+          {assetId ? "Editar Activo" : "Registrar Activo"}
+        </Text>
 
-        <Input
-          label="Categoría"
-          value={asset.categoria}
-          error={errors.categoria}
-          onChange={(v) => handleChange("categoria", v)}
-        />
+        <Input label="Nombre" value={asset.nombre} error={errors.nombre}
+          onChange={(v) => handleChange("nombre", v)} />
 
-        <Input
-          label="Estado"
-          value={asset.estado}
-          error={errors.estado}
-          onChange={(v) => handleChange("estado", v)}
-        />
+        <Input label="Categoría" value={asset.categoria} error={errors.categoria}
+          onChange={(v) => handleChange("categoria", v)} />
 
-        <Input
-          label="Ubicación"
-          value={asset.ubicacion}
-          error={errors.ubicacion}
-          onChange={(v) => handleChange("ubicacion", v)}
-        />
+        <Input label="Estado" value={asset.estado} error={errors.estado}
+          onChange={(v) => handleChange("estado", v)} />
 
-        <Input
-          label="Costo inicial (USD)"
-          value={asset.costoInicial?.toString() || ""}
-          error={errors.costoInicial}
-          keyboard="numeric"
-          onChange={(v) => handleChange("costoInicial", v)}
-        />
+        <Input label="Ubicación" value={asset.ubicacion} error={errors.ubicacion}
+          onChange={(v) => handleChange("ubicacion", v)} />
 
-        <Input
-          label="Depreciación anual (%)"
-          value={asset.depreciacionAnual?.toString() || ""}
-          keyboard="numeric"
-          error={errors.depreciacionAnual}
-          onChange={(v) => handleChange("depreciacionAnual", v)}
-        />
+        <Input label="Costo inicial (USD)" value={asset.costoInicial?.toString() || ""}
+          error={errors.costoInicial} keyboard="numeric"
+          onChange={(v) => handleChange("costoInicial", v)} />
 
-        {/* Botón premium */}
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={handleSave}
-          disabled={loading}
-        >
-          <Ionicons
-            name="save-outline"
-            size={22}
-            color="white"
-          />
-          <Text style={styles.saveText}>
-            {loading ? "Guardando..." : "Guardar Activo"}
-          </Text>
+        <Input label="Depreciación anual (%)" value={asset.depreciacionAnual?.toString() || ""}
+          keyboard="numeric" error={errors.depreciacionAnual}
+          onChange={(v) => handleChange("depreciacionAnual", v)} />
+
+        <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
+          <Ionicons name="save-outline" size={22} color="white" />
+          <Text style={styles.saveText}>{loading ? "Guardando..." : "Guardar Activo"}</Text>
         </TouchableOpacity>
 
-        {/* QR */}
+        {showUpdatedMessage && (
+          <Animated.View style={[styles.updateToast, { opacity: fadeAnim }]}>
+            <Ionicons name="checkmark-circle" size={22} color="white" />
+            <Text style={styles.updateToastText}>Activo actualizado correctamente</Text>
+          </Animated.View>
+        )}
+
         {savedAsset && (
-          <View style={styles.qrBox}>
-            <Text style={styles.qrLabel}>QR del activo (ID: {savedAsset.id})</Text>
-            <QRCode value={String(savedAsset.id)} size={200} />
+          <View>
+            <View style={styles.qrBox}>
+              <Text style={styles.qrLabel}>QR del activo (ID: {savedAsset.id})</Text>
+              <QRCode value={String(savedAsset.id)} size={200} />
+            </View>
           </View>
         )}
+
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-/* ============================================================
-      🔹 Input Premium con errores
-============================================================ */
 function Input({
   label,
   value,
@@ -269,15 +261,32 @@ function Input({
   );
 }
 
-/* ============================================================
-      🔹 ESTILOS PREMIUM
-============================================================ */
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
 
   container: {
     padding: 20,
     backgroundColor: "#F9FAFB",
+    paddingTop: 40,
+  },
+
+  /* 🔹 Nuevo estilo profesional para el mensaje arriba */
+  topInfoBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E8F8F5",
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: "#1ABC9C",
+  },
+
+  topInfoText: {
+    marginLeft: 10,
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#1ABC9C",
   },
 
   title: {
@@ -301,6 +310,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#1ABC9C",
+  },
+
+  updateToast: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#28C76F",
+    padding: 14,
+    borderRadius: 14,
+    marginTop: 15,
+    marginBottom: 10,
+    elevation: 3,
+  },
+
+  updateToastText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+    marginLeft: 10,
   },
 
   inputLabel: {
@@ -347,7 +374,7 @@ const styles = StyleSheet.create({
   },
 
   qrBox: {
-    marginTop: 30,
+    marginTop: 10,
     alignItems: "center",
     backgroundColor: "white",
     padding: 20,
