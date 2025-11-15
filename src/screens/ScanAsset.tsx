@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from "rea
 import { CameraView, useCameraPermissions } from "expo-camera";
 import type { BarcodeScanningResult } from "expo-camera";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useIsFocused, useFocusEffect } from "@react-navigation/native";
 
 import { Asset } from "../types/Asset";
 import { getAsset } from "../api/assets";
@@ -11,8 +12,6 @@ type RootStackParamList = {
   AddAsset: { assetId?: number };
   ScanAsset: undefined;
   AssetDetail: { assetId: number };
-
-  // ✔ necesario para navegar al tab "Activos"
   Activos: {
     screen: "AddAsset" | "AssetList" | "AssetDetail";
     params?: any;
@@ -33,10 +32,20 @@ export default function ScanAsset({ navigation }: Props) {
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [activeCamera, setActiveCamera] = useState(true);
+
+  const isFocused = useIsFocused();
 
   useEffect(() => {
     if (!permission) requestPermission();
   }, [permission]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setActiveCamera(true); // activa la cámara al enfocar la pantalla
+      return () => setActiveCamera(false); // desactiva la cámara al salir
+    }, [])
+  );
 
   const handleBarCodeScanned = async ({ data }: BarcodeScanningResult) => {
     setScanned(true);
@@ -57,12 +66,10 @@ export default function ScanAsset({ navigation }: Props) {
         console.log("✅ Activo encontrado:", existente.id);
         setMessage(`Activo encontrado: ${existente.nombre}`);
 
-        // ✔ NAVEGACIÓN CORRECTA HACIA EL STACK
         navigation.navigate("Activos", {
           screen: "AddAsset",
           params: { assetId: existente.id },
         });
-
       } else {
         console.log("❌ QR no corresponde a ningún activo.");
         setMessage("Este QR no está asociado a ningún activo.");
@@ -80,7 +87,7 @@ export default function ScanAsset({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {!scanned && (
+      {!scanned && activeCamera && isFocused && (
         <CameraView
           style={StyleSheet.absoluteFillObject}
           facing="back"
