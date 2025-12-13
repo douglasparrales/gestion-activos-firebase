@@ -1,14 +1,16 @@
 export interface Asset {
-  id: number;                    // ID numérico autoincremental
-  
+  id: number;
   nombre: string;
   categoria: string;
   estado: string;
   ubicacion: string;
 
-  fechaAdquisicion: string;      // formato YYYY-MM-DD
+  descripcion?: string;
+  observacion?: string;
+
+  fechaAdquisicion: string;
   fechaRegistro?: string;
 
-  costoInicial?: number;         // precio de compra
-  depreciacionAnual?: number;     // valor en % o cantidad fija por año
+  costoInicial?: number | string;        // ← FIX
+  depreciacionAnual?: number | string;   // ← FIX
 }

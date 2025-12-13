@@ -14,7 +14,7 @@ import { Asset } from "../types/Asset";
 import { getAllAssets } from "../api/assets";
 import { Ionicons } from "@expo/vector-icons";
 
-// 📌 Importar la función exportExcel
+// Exportar Excel
 import { exportAssetsToExcel } from "../utils/exportExcel";
 
 type NavProp = StackNavigationProp<RootStackParamList, "AssetList">;
@@ -25,9 +25,6 @@ export default function AssetList() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
 
-  /* ======================================================
-     🔄 Refrescar la lista cada vez que se vuelva a esta pantalla
-  ====================================================== */
   const loadAssets = async () => {
     setLoading(true);
     const data = await getAllAssets();
@@ -44,10 +41,8 @@ export default function AssetList() {
   if (loading) {
     return (
       <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={{ marginTop: 10, color: "#444" }}>
-          Cargando activos...
-        </Text>
+        <ActivityIndicator size="large" color="#1E88E5" />
+        <Text style={{ marginTop: 10, color: "#444" }}>Cargando activos...</Text>
       </View>
     );
   }
@@ -55,100 +50,126 @@ export default function AssetList() {
   const renderItem = ({ item }: { item: Asset }) => (
     <TouchableOpacity
       style={styles.card}
-      onPress={() =>
-        navigation.navigate("AssetDetail", { assetId: item.id })
-      }
+      // Navegación: item.id debe ser un número para la ruta, lo que es correcto aquí.
+      onPress={() => navigation.navigate("AssetDetail", { assetId: item.id })}
     >
-      <View style={styles.cardLeft}>
-        <Text style={styles.cardTitle}>{item.nombre}</Text>
+      <View style={styles.cardContent}>
+        {/* ✅ REFUERZO: Aseguramos que el nombre es string */}
+        <Text style={styles.cardTitle}>{String(item.nombre)}</Text>
 
-        {item.categoria ? (
-          <Text style={styles.cardSubtitle}>{item.categoria}</Text>
-        ) : null}
+        {/* Renderizado Condicional Reforzado: Aseguramos que es un String si existe */}
+        {item.categoria && <Text style={styles.cardSubtitle}>{String(item.categoria)}</Text>}
 
-        {item.estado ? (
-          <Text style={styles.status}>Estado: {item.estado}</Text>
-        ) : null}
+        {/* Renderizado Condicional Reforzado: Aseguramos que es un String si existe */}
+        {item.estado && <Text style={styles.status}>Estado: {String(item.estado)}</Text>}
 
-        <Text style={styles.cardId}>ID: {item.id}</Text>
+        {/* 🚨 CORRECCIÓN CLAVE: item.id puede ser un número, lo casteamos a string dentro del Text */}
+        <Text style={styles.cardId}>ID: {String(item.id)}</Text>
       </View>
 
-      <Ionicons name="chevron-forward" size={26} color="#888" />
+      <Ionicons name="chevron-forward" size={26} color="#A0A0A0" />
     </TouchableOpacity>
   );
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* 📌 BOTÓN EXPORTAR EXCEL */}
-      <TouchableOpacity
-        style={styles.exportButton}
-        onPress={() => exportAssetsToExcel(assets)}
+    <View style={styles.container}>
 
-      >
-        <Ionicons name="document-text-outline" size={26} color="white" />
-      </TouchableOpacity>
+      {/* 🔵 HEADER IGUAL A HOMESCREEN */}
+      <View style={styles.header}>
+        <Ionicons name="menu" size={26} color="#FFF" />
 
+        <Text style={styles.headerTitle}>Lista de Activos</Text>
+
+        <TouchableOpacity
+          style={styles.exportButton}
+          onPress={() => exportAssetsToExcel(assets)}
+        >
+          <Ionicons name="document-text-outline" size={18} color="white" />
+        </TouchableOpacity>
+      </View>
+
+      {/* LISTA */}
       <FlatList
         data={assets}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
-        contentContainerStyle={{ paddingVertical: 10 }}
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        contentContainerStyle={{ padding: 16 }}
       />
     </View>
   );
 }
 
-/* ======================================================
-   🎨 ESTILOS ORIGINALES + Botón exportar
-====================================================== */
+/* ==========================================
+   🎨 ESTILOS CORPORATIVOS ACTUALIZADOS
+========================================== */
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#F5F7FA",
+  },
+
+  /* 🔵 HEADER CORPORATIVO (igual que HomeScreen) */
+  header: {
+    backgroundColor: "#1E88E5",
+    paddingTop: 50,
+    paddingBottom: 15,
+    paddingHorizontal: 20,
+
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+
+  headerTitle: {
+    color: "#FFF",
+    fontSize: 22,
+    fontWeight: "700",
+  },
+
   loader: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
 
-  /* 🔹 Botón flotante exportar */
+  /* 🔵 BOTÓN EXPORTAR */
   exportButton: {
-    position: "absolute",
-    top: 15,
-    right: 15,
-    backgroundColor: "#007AFF",
-    padding: 12,
-    borderRadius: 30,
-    zIndex: 999,
-    elevation: 4,
-    shadowColor: "#007AFF",
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 3 }
+    backgroundColor: "#1565C0",
+    padding: 8,
+    borderRadius: 10,
   },
 
-  /* Tarjeta del activo */
+  /* TARJETA */
   card: {
     backgroundColor: "#FFFFFF",
-    marginHorizontal: 14,
-    marginVertical: 8,
-    padding: 20,
     borderRadius: 16,
-
+    padding: 18,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-
+    elevation: 2,
     shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
   },
 
-  cardLeft: {
-    flexDirection: "column",
+  cardContent: {
+    flex: 1,
+    paddingRight: 10,
   },
 
   cardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#222",
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#1A1A1A",
   },
 
   cardSubtitle: {
@@ -159,7 +180,7 @@ const styles = StyleSheet.create({
 
   status: {
     fontSize: 13,
-    color: "#007AFF",
+    color: "#1E88E5",
     marginTop: 4,
     fontWeight: "600",
   },
@@ -167,6 +188,6 @@ const styles = StyleSheet.create({
   cardId: {
     fontSize: 12,
     color: "#999",
-    marginTop: 5,
+    marginTop: 4,
   },
 });

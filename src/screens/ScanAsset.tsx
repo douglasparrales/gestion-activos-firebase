@@ -16,6 +16,11 @@ type RootStackParamList = {
     screen: "AddAsset" | "AssetList" | "AssetDetail";
     params?: any;
   };
+  // Asumo que el navegador de pestañas se llama 'Tabs'
+  Tabs: {
+    screen: "Inicio" | "Lista" | "Escanear" | "Agregar";
+    params?: any;
+  };
 };
 
 type ScanAssetScreenNavigationProp = StackNavigationProp<
@@ -50,26 +55,34 @@ export default function ScanAsset({ navigation }: Props) {
   const handleBarCodeScanned = async ({ data }: BarcodeScanningResult) => {
     setScanned(true);
     setLoading(true);
-    setMessage("Procesando QR...");
+
+    // ✅ CORRECCIÓN TS: Declarar 'existente' y 'assetIdNumber' en el ámbito de la función
+    let existente: Asset | null = null;
+    let assetIdNumber: number | null = null;
 
     try {
       const qrValue = String(data).trim();
       console.log("🔍 Escaneado:", qrValue);
 
-      let existente: Asset | null = null;
-
       if (!isNaN(Number(qrValue))) {
-        existente = await getAsset(qrValue);
+        assetIdNumber = Number(qrValue);
+        existente = await getAsset(assetIdNumber);
       }
 
       if (existente) {
         console.log("✅ Activo encontrado:", existente.id);
-        setMessage(`Activo encontrado: ${existente.nombre}`);
+        setMessage(`Activo encontrado: ${String(existente.nombre)}`);
 
-        navigation.navigate("Activos", {
-          screen: "AddAsset",
+        // 1. Disparar la navegación.
+        // 🚀 CORRECCIÓN DE NAVEGACIÓN: Cambiado "Activos" a "Tabs" (el nombre del Navigator)
+        navigation.navigate("Tabs", {
+          screen: "Agregar", // Nombre de la pestaña de edición
           params: { assetId: existente.id },
         });
+
+        // 2. Si la navegación es exitosa, detenemos la ejecución.
+        return;
+
       } else {
         console.log("❌ QR no corresponde a ningún activo.");
         setMessage("Este QR no está asociado a ningún activo.");
@@ -78,7 +91,11 @@ export default function ScanAsset({ navigation }: Props) {
       console.error("❌ Error al procesar QR:", error);
       setMessage("Error al procesar QR.");
     } finally {
-      setLoading(false);
+      // ✅ 'existente' es accesible aquí y garantiza que 'loading' solo se desactive
+      // si no se ejecutó la navegación.
+      if (!existente) {
+        setLoading(false);
+      }
     }
   };
 

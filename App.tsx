@@ -1,81 +1,52 @@
-import React, { useEffect, useRef } from "react";
-import {
-  View,
-  TouchableOpacity,
-  Animated,
-  StyleSheet,
-  GestureResponderEvent,
-} from "react-native";
+import React, { useEffect } from "react";
 import { NavigationContainer } from "@react-navigation/native";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createStackNavigator } from "@react-navigation/stack";
-import { createBottomTabNavigator, BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "./src/services/firebaseConfig";
-import { RootStackParamList } from "./src/types/navigation";
 
 // Screens
+import HomeScreen from "./src/screens/HomeScreen";
 import AssetList from "./src/screens/AssetList";
 import AddAsset from "./src/screens/AddAsset";
 import ScanAsset from "./src/screens/ScanAsset";
 import AssetDetail from "./src/screens/AssetDetail";
 
-// Safe Area
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { UserProvider } from "./src/context/UserContext";
 
-const Stack = createStackNavigator<RootStackParamList>();
+// ----- NAVIGATORS -----
 const Tabs = createBottomTabNavigator();
+const Stack = createStackNavigator();
 
-/* -----------------------------------------------------
-   STACK — Lista → Detalle → Agregar
------------------------------------------------------- */
-function AssetStack() {
+/* ----------------------------------------------------------------------
+    TABS (4 ITEMS)
+    Solución: Todas las pantallas que deben coexistir con la barra de tabs
+    deben vivir dentro del Tabs.Navigator, incluyendo aquellas con Header.
+    Para que AssetList pueda navegar a AssetDetail, AssetList debe ser 
+    envuelto en un Stack anidado, pero para no cambiar la estructura del
+    Tab Navigator, simplemente moveremos AssetDetail a un Stack anidado
+    donde se use.
+---------------------------------------------------------------------- */
+
+// Stack anidado para la pantalla de lista, para que pueda tener un Header y Detail
+function AssetListStack() {
   return (
-    <Stack.Navigator>
-      <Stack.Screen name="AssetList" component={AssetList} options={{ title: "Activos" }} />
-      <Stack.Screen name="AssetDetail" component={AssetDetail} options={{ title: "Detalle del Activo" }} />
-      <Stack.Screen name="AddAsset" component={AddAsset} options={{ title: "Registrar / Editar Activo" }} />
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ListaBase" component={AssetList} />
+      <Stack.Screen
+        name="AssetDetail"
+        component={AssetDetail}
+        /* ✅ CAMBIO REALIZADO: headerShown: false para quitar el Header nativo. */
+        options={{ headerShown: false }}
+      />
     </Stack.Navigator>
   );
 }
 
-/* -----------------------------------------------------
-   BOTÓN CENTRAL — Tipado seguro
------------------------------------------------------- */
-interface CentralTabButtonProps extends BottomTabBarButtonProps {
-  children: React.ReactNode;
-}
 
-function CentralTabButton({ children, onPress }: CentralTabButtonProps) {
-  const scale = useRef(new Animated.Value(1)).current;
-
-  const bounce = () => {
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 0.85, duration: 120, useNativeDriver: true }),
-      Animated.timing(scale, { toValue: 1, duration: 120, useNativeDriver: true }),
-    ]).start();
-  };
-
-  return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={(e: GestureResponderEvent) => {
-        bounce();
-        onPress?.(e);
-      }}
-      style={styles.centerTabWrapper}
-    >
-      <Animated.View style={[styles.centerTabButton, { transform: [{ scale }] }]}>
-        {children}
-      </Animated.View>
-    </TouchableOpacity>
-  );
-}
-
-/* -----------------------------------------------------
-   TABS — Barra estilo WhatsApp
------------------------------------------------------- */
 function TabsWrapper() {
   const insets = useSafeAreaInsets();
 
@@ -99,40 +70,49 @@ function TabsWrapper() {
       }}
     >
       <Tabs.Screen
-        name="Activos"
-        component={AssetStack}
+        name="Inicio"
+        component={HomeScreen}
         options={{
-          tabBarIcon: ({ color }) => <Ionicons name="layers-outline" size={26} color={color} />,
-        }}
-      />
-
-      <Tabs.Screen
-        name="Agregar"
-        component={AddAsset}
-        options={{
-          tabBarLabel: "",
-          tabBarButton: (props) => (
-            <CentralTabButton {...props}>
-              <Ionicons name="add" size={36} color="white" />
-            </CentralTabButton>
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="home-outline" size={26} color={color} />
           ),
         }}
       />
-
+      <Tabs.Screen
+        name="Lista"
+        // ✅ CAMBIO CLAVE: Usamos un Stack anidado para la lista
+        component={AssetListStack}
+        options={{
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="list-outline" size={26} color={color} />
+          ),
+        }}
+      />
       <Tabs.Screen
         name="Escanear"
         component={ScanAsset}
         options={{
-          tabBarIcon: ({ color }) => <Ionicons name="qr-code-outline" size={26} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="qr-code-outline" size={26} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="Agregar" // MANTENIDO EN TABS
+        component={AddAsset}
+        options={{
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="add-circle-outline" size={30} color={color} />
+          ),
         }}
       />
     </Tabs.Navigator>
   );
 }
 
-/* -----------------------------------------------------
-   APP PRINCIPAL
------------------------------------------------------- */
+/* -------------------------
+    APP PRINCIPAL CON STACK
+-------------------------- */
 export default function App() {
   useEffect(() => {
     (async () => {
@@ -148,34 +128,22 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <TabsWrapper />
-      </NavigationContainer>
+      <UserProvider>
+        <NavigationContainer>
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+
+            {/* 1. Tabs como pantalla principal (TODO el contenido vive aquí) */}
+            <Stack.Screen name="Tabs" component={TabsWrapper} />
+
+            {/* ❌ ELIMINADO: Estas pantallas se movieron DENTRO de Tabs (o sus Stacks anidados) 
+                para asegurar que la barra de pestañas NUNCA desaparezca. */}
+
+            {/* <Stack.Screen name="AddAsset" component={AddAsset} ... /> */}
+            {/* <Stack.Screen name="AssetDetail" component={AssetDetail} ... /> */}
+
+          </Stack.Navigator>
+        </NavigationContainer>
+      </UserProvider>
     </SafeAreaProvider>
   );
 }
-
-/* -----------------------------------------------------
-   ESTILOS PREMIUM
------------------------------------------------------- */
-const styles = StyleSheet.create({
-  centerTabWrapper: {
-    position: "relative",
-    top: -15,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  centerTabButton: {
-    width: 65,
-    height: 65,
-    borderRadius: 33,
-    backgroundColor: "#007AFF",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 10,
-  },
-});
