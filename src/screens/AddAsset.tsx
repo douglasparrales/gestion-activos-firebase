@@ -155,29 +155,37 @@ export default function AddAsset() {
   };
 
   const handleSave = async () => {
-    if (!validateForm()) return;
-    setLoading(true);
-    try {
-      const toSave: Asset = { ...asset, costoInicial: Number(asset.costoInicial) || 0, depreciacionAnual: Number(asset.depreciacionAnual) || 0, fechaRegistro: assetId ? asset.fechaRegistro : new Date().toISOString(), };
-      const newId = await addAsset(toSave);
-      const saved = { ...toSave, id: newId };
-      setSavedAsset(saved);
+  if (!validateForm()) return;
+  setLoading(true);
+  try {
+    const toSave: Asset = {
+      ...asset,
+      costoInicial: Number(asset.costoInicial) || 0,
+      depreciacionAnual: Number(asset.depreciacionAnual) || 0,
+      fechaRegistro: assetId ? asset.fechaRegistro : new Date().toISOString(),
+    };
+    const newId = await addAsset(toSave);
+    const saved = { ...toSave, id: newId };
+    setSavedAsset(saved);
 
-      if (assetId) {
-        // ✅ EDITAR: Navega al detalle para mostrar cambios.
-        navigation.navigate("AssetDetail", { assetId: saved.id, edited: true });
-      } else {
-        // ✅ CREAR NUEVO: Navega al detalle del activo recién creado.
-        // Esto resuelve que no haga nada después de guardar un activo nuevo.
-        navigation.navigate("AssetDetail", { assetId: newId });
-      }
-    } catch (error) {
-      console.error("Error al guardar activo:", error);
+    // 🔹 Actualizar total de activos localmente
+    setTotalAssets((prev) => (prev ?? 0) + 1);
+
+    // 🔹 Mostrar toast de guardado
+    showToast();
+
+    // 🔹 Resetear formulario solo si es creación
+    if (!assetId) {
+      setAsset(initialState);
+      setErrors({});
     }
-    finally {
-      setLoading(false);
-    }
-  };
+  } catch (error) {
+    console.error("Error al guardar activo:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   if (loadingAsset) return (<View style={styles.center}><ActivityIndicator size="large" color="#1E88E5" /><Text style={{ marginTop: 10, color: "#444" }}>Cargando activo...</Text></View>);
   const isInvalid = loading || Object.values(errors).some((e) => e);
