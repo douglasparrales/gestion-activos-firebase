@@ -1,22 +1,20 @@
+// src/context/UserContext.tsx
 import React, { createContext, useContext, useState } from "react";
 
-type Role = "admin" | "normal";
+interface User {
+  uid: string;
+  email: string | null;
+  name: string;
+  role: string;
+}
 
-type UserContextType = {
-  role: Role;
-  setRole: (r: Role) => void;
-};
+const UserContext = createContext<any>(null);
 
-const UserContext = createContext<UserContextType>({
-  role: "normal",
-  setRole: () => {},
-});
-
-export const UserProvider = ({ children }: { children: React.ReactNode }) => {
-  const [role, setRole] = useState<Role>("admin"); // ← Cambia a "normal" cuando quieras
+export const UserProvider = ({ children }: any) => {
+  const [user, setUser] = useState<User | null>(null);
 
   return (
-    <UserContext.Provider value={{ role, setRole }}>
+    <UserContext.Provider value={{ user, setUser }}>
       {children}
     </UserContext.Provider>
   );

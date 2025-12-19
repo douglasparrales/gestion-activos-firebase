@@ -1,37 +1,38 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from "react-native";
 import { MaterialIcons, Ionicons, FontAwesome5 } from "@expo/vector-icons";
-// Importado useFocusEffect
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
-// Importamos RootStackParamList para tipado
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../types/navigation";
 
 import { getAllAssets } from "../services/activosService";
 import { Asset } from "../types/Asset";
 
-// 👇 Tipo de navegación CORREGIDO
-// La navegación debe apuntar al contenedor de pestañas (Tabs) ya que AddAsset vive dentro de él ahora.
+// 🔐 CONTEXTO USUARIO
+import { useUser } from "../context/UserContext";
+import { signOut } from "firebase/auth";
+import { auth } from "../services/firebaseConfig";
+
+// 👇 Tipo de navegación
 type HomeScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
-  "Tabs" // Apuntamos a la ruta principal que contiene todas las pestañas
+  "Tabs"
 >;
 
 export default function HomeScreen() {
   const navigation = useNavigation<HomeScreenNavigationProp>();
+  const { user, setUser } = useUser();
 
   const [assets, setAssets] = useState<Asset[]>([]);
   const [categorias, setCategorias] = useState<any>({});
 
-  // Función para cargar y procesar los datos
+  // Cargar datos
   const loadData = async () => {
     const data = await getAllAssets();
     setAssets(data);
 
-    // Agrupar categorías dinámicamente
     const cats: any = {};
     data.forEach((item) => {
-      // Usar 'Otros' si la categoría es null/undefined o vacía
       const catName = item.categoria?.trim() || "Otros";
       cats[catName] = (cats[catName] || 0) + 1;
     });
@@ -39,14 +40,14 @@ export default function HomeScreen() {
     setCategorias(cats);
   };
 
-  // ✅ 1. Uso de useFocusEffect para recargar datos al enfocar la pantalla
+  // Recargar al enfocar
   useFocusEffect(
     useCallback(() => {
       loadData();
     }, [])
   );
 
-  // Función de mapeo de íconos para evitar la repetición del condicional extenso
+  // Íconos por categoría
   const getCategoryIcon = (cat: string) => {
     switch (cat) {
       case "Equipos":
@@ -56,58 +57,81 @@ export default function HomeScreen() {
       case "Vehículos":
         return <FontAwesome5 name="car" size={22} color="#F9A825" />;
       default:
-        // Incluye "Otros" y cualquier otra categoría no mapeada
         return <MaterialIcons name="inventory" size={24} color="#E53935" />;
     }
   };
 
+  // 🚪 LOGOUT
+  const handleLogout = () => {
+    Alert.alert(
+      "Cerrar sesión",
+      "¿Seguro que deseas salir?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Salir",
+          style: "destructive",
+          onPress: async () => {
+            await signOut(auth);
+            setUser(null);
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.container}>
 
-      {/* Header */}
+      {/* HEADER */}
       <View style={styles.header}>
-        <Ionicons name="menu" size={26} color="#FFF" />
-        <Text style={styles.headerTitle}>Activos</Text>
+        <TouchableOpacity onPress={handleLogout}>
+          <TouchableOpacity onPress={() => navigation.navigate("Configuracion" as never)}>
+            <Ionicons name="settings-outline" size={26} color="#FFF" />
+          </TouchableOpacity>
+
+        </TouchableOpacity>
+
+        <View style={{ alignItems: "center" }}>
+          <Text style={styles.headerTitle}>Activos</Text>
+          <Text style={styles.headerUser}>
+            {user?.name} ({user?.role})
+          </Text>
+        </View>
+
         <Ionicons name="search" size={26} color="#FFF" />
       </View>
 
       <ScrollView>
 
-        {/* Total Activos */}
+        {/* TOTAL ACTIVOS */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Total activos</Text>
 
           <View style={styles.totalRow}>
-            {/* ✅ REFUERZO: Aseguramos que la longitud es un String */}
             <Text style={styles.totalNumber}>{String(assets.length)}</Text>
 
             <TouchableOpacity
               style={styles.addButton}
-              // ✅ CORRECCIÓN DE NAVEGACIÓN: Se usa navegación anidada para ir a la pestaña "Agregar"
-              // Esto evita el error de navegación y mantiene la barra de pestañas.
               onPress={() => navigation.navigate("Tabs", { screen: "Agregar" })}
             >
               <Text style={styles.addButtonText}>Agregar</Text>
             </TouchableOpacity>
-
           </View>
         </View>
 
-        {/* Categorías */}
+        {/* CATEGORÍAS */}
         <Text style={styles.sectionTitle}>Categorias</Text>
 
         <View style={styles.card}>
           {Object.keys(categorias).map((cat, index) => (
             <View key={cat}>
-
               <View style={styles.row}>
-                {/* Iconos según categoría (usando la función auxiliar) */}
                 {getCategoryIcon(cat)}
-
                 <Text style={styles.rowText}>{cat}</Text>
-                {/* ✅ CORRECCIÓN DEFINITIVA: Aseguramos que el valor de la cuenta siempre es un String */}
-                <Text style={styles.rowNumber}>{String(categorias[cat])}</Text>
+                <Text style={styles.rowNumber}>
+                  {String(categorias[cat])}
+                </Text>
               </View>
 
               {index < Object.keys(categorias).length - 1 && (
@@ -117,7 +141,7 @@ export default function HomeScreen() {
           ))}
         </View>
 
-        {/* Alertas */}
+        {/* ALERTAS */}
         <Text style={styles.sectionTitle}>Alertas</Text>
 
         <View style={styles.card}>
@@ -132,7 +156,6 @@ export default function HomeScreen() {
             <Text style={styles.alertText}>Mantenimiento</Text>
             <Text style={styles.alertNumber}>12</Text>
           </View>
-
         </View>
 
       </ScrollView>
@@ -140,13 +163,14 @@ export default function HomeScreen() {
   );
 }
 
+/* ---------------- STYLES ---------------- */
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F5F7FA",
   },
 
-  /* Header */
   header: {
     backgroundColor: "#1E88E5",
     paddingTop: 50,
@@ -156,13 +180,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+
   headerTitle: {
     color: "#FFF",
     fontSize: 22,
     fontWeight: "700",
   },
 
-  /* Card */
+  headerUser: {
+    color: "#E3F2FD",
+    fontSize: 12,
+    marginTop: 2,
+  },
+
   card: {
     marginHorizontal: 16,
     marginTop: 16,
@@ -200,12 +230,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 10,
   },
+
   addButtonText: {
     color: "#1E88E5",
     fontWeight: "600",
   },
 
-  /* Secciones */
   sectionTitle: {
     marginTop: 22,
     marginLeft: 16,
@@ -214,17 +244,18 @@ const styles = StyleSheet.create({
     color: "#222",
   },
 
-  /* Filas */
   row: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
   },
+
   rowText: {
     marginLeft: 12,
     fontSize: 16,
     flex: 1,
   },
+
   rowNumber: {
     fontSize: 16,
     fontWeight: "600",
@@ -237,7 +268,6 @@ const styles = StyleSheet.create({
     marginVertical: 6,
   },
 
-  /* Alertas */
   alertBox: {
     flexDirection: "row",
     padding: 14,
@@ -245,12 +275,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     alignItems: "center",
   },
+
   alertText: {
     color: "#FFF",
     fontSize: 16,
     marginLeft: 10,
     flex: 1,
   },
+
   alertNumber: {
     color: "#FFF",
     fontWeight: "700",

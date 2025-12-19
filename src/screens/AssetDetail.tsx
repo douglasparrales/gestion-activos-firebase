@@ -7,7 +7,6 @@ import { MaterialIcons, FontAwesome5, Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import QRCode from "react-native-qrcode-svg";
 import ViewShot from "react-native-view-shot";
-import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
 
@@ -62,24 +61,37 @@ export default function AssetDetail() {
   const imprimirQR = async () => {
     try {
       const viewShot = qrRef.current;
-      // Aseguramos que viewShot no sea nulo Y que la función 'capture' exista.
+
       if (!viewShot || !viewShot.capture) {
-        console.error("Referencia QR no disponible o método capture ausente.");
+        Alert.alert("Error", "No se pudo generar el QR");
         return;
       }
 
+      // ✅ SIN argumentos
       const uri = await viewShot.capture();
+
       if (!uri) return;
 
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-      const html = `<html><body style="text-align:center; padding:30px; font-family:Roboto, Arial;">
-<h2 style="margin-bottom:0; color:#1565C0;">${asset?.nombre || ''}</h2><h4 style="margin-top:5px; color:#5F6368;">ID: ${asset?.id || ''}</h4>
-<img src="data:image/png;base64,${base64}" style="width:250px; height:250px; margin-top:30px; border: 1px solid #E0E0E0; padding: 10px; border-radius: 8px;" />
-</body></html>`;
-      const { uri: pdfUri } = await Print.printToFileAsync({ html });
-      await Sharing.shareAsync(pdfUri, { mimeType: 'application/pdf', dialogTitle: 'Compartir QR' });
-    } catch (error) { Alert.alert("Error", "No se pudo generar el PDF del código QR."); }
+      const fileName = `QR_Activo_${asset?.id}.png`;
+      const newPath = FileSystem.documentDirectory + fileName;
+
+      await FileSystem.copyAsync({
+        from: uri,
+        to: newPath,
+      });
+
+      await Sharing.shareAsync(newPath, {
+        mimeType: "image/png",
+        dialogTitle: "Compartir código QR",
+      });
+
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "No se pudo generar la imagen del QR");
+    }
   };
+
+
 
   const handleDelete = () => {
     if (!asset) return;
@@ -168,10 +180,30 @@ export default function AssetDetail() {
         <View style={styles.qrContainer}>
           <ViewShot ref={qrRef} options={{ format: "png", quality: 1 }}>
             <View style={styles.qrBox}>
-              {/* ✅ REFUERZO: Aseguramos que asset.id sea string para el QR */}
-              <QRCode value={String(asset.id)} size={160} />
+
+              {/* Nombre del activo */}
+              <Text style={styles.qrTitle} numberOfLines={2}>
+                {String(asset.nombre)}
+              </Text>
+
+              {/* Ubicación */}
+              <Text style={styles.qrSubtitle}>
+                Ubicación: {String(asset.ubicacion || "—")}
+              </Text>
+
+              {/* QR */}
+              <View style={{ marginVertical: 14 }}>
+                <QRCode value={String(asset.id)} size={160} />
+              </View>
+
+              {/* ID */}
+              <Text style={styles.qrId}>
+                ID: {String(asset.id)}
+              </Text>
+
             </View>
           </ViewShot>
+
           <Text style={styles.qrLabel}>Escanea para ver detalles del activo</Text>
         </View>
 
@@ -263,6 +295,28 @@ const styles = StyleSheet.create({
   qrContainer: { alignItems: "center", marginBottom: 30, marginTop: 10 },
   qrBox: { backgroundColor: "#FFFFFF", padding: 20, borderRadius: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
   qrLabel: { marginTop: 12, color: "#5F6368", fontSize: 14, fontWeight: "400" },
+
+  qrTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#202124",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+
+  qrSubtitle: {
+    fontSize: 13,
+    color: "#5F6368",
+    textAlign: "center",
+  },
+
+  qrId: {
+    fontSize: 12,
+    color: "#5F6368",
+    marginTop: 6,
+    fontWeight: "500",
+  },
+
 
   // Buttons
   btnPrimary: { backgroundColor: "#1E88E5", paddingVertical: 16, borderRadius: 12, alignItems: "center", marginBottom: 12, shadowColor: "#1E88E5", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },

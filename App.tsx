@@ -1,4 +1,6 @@
 import React, { useEffect } from "react";
+import "react-native-gesture-handler";
+
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createStackNavigator } from "@react-navigation/stack";
@@ -7,48 +9,41 @@ import { Ionicons } from "@expo/vector-icons";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "./src/services/firebaseConfig";
 
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { UserProvider, useUser } from "./src/context/UserContext";
+
 // Screens
 import HomeScreen from "./src/screens/HomeScreen";
 import AssetList from "./src/screens/AssetList";
 import AddAsset from "./src/screens/AddAsset";
 import ScanAsset from "./src/screens/ScanAsset";
 import AssetDetail from "./src/screens/AssetDetail";
+import LoginScreen from "./src/screens/LoginScreen";
+import CreateUserScreen from "./src/screens/CreateUserScreen";
+import SettingsScreen from "./src/screens/SettingsScreen";
 
-import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
-import { UserProvider } from "./src/context/UserContext";
-
-// ----- NAVIGATORS -----
+// ---------------- NAVIGATORS ----------------
 const Tabs = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 /* ----------------------------------------------------------------------
-    TABS (4 ITEMS)
-    Solución: Todas las pantallas que deben coexistir con la barra de tabs
-    deben vivir dentro del Tabs.Navigator, incluyendo aquellas con Header.
-    Para que AssetList pueda navegar a AssetDetail, AssetList debe ser 
-    envuelto en un Stack anidado, pero para no cambiar la estructura del
-    Tab Navigator, simplemente moveremos AssetDetail a un Stack anidado
-    donde se use.
+   STACK PARA LISTA
 ---------------------------------------------------------------------- */
-
-// Stack anidado para la pantalla de lista, para que pueda tener un Header y Detail
 function AssetListStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ListaBase" component={AssetList} />
-      <Stack.Screen
-        name="AssetDetail"
-        component={AssetDetail}
-        /* ✅ CAMBIO REALIZADO: headerShown: false para quitar el Header nativo. */
-        options={{ headerShown: false }}
-      />
+      <Stack.Screen name="AssetDetail" component={AssetDetail} />
     </Stack.Navigator>
   );
 }
 
-
+/* ----------------------------------------------------------------------
+   TABS
+---------------------------------------------------------------------- */
 function TabsWrapper() {
   const insets = useSafeAreaInsets();
+  const { user } = useUser();
 
   return (
     <Tabs.Navigator
@@ -60,11 +55,6 @@ function TabsWrapper() {
           height: 60 + insets.bottom,
           paddingBottom: insets.bottom,
           backgroundColor: "#fff",
-          borderTopWidth: 0,
-          shadowColor: "#000",
-          shadowOpacity: 0.06,
-          shadowRadius: 8,
-          elevation: 8,
         },
         tabBarLabelStyle: { fontSize: 12, fontWeight: "600" },
       }}
@@ -74,35 +64,48 @@ function TabsWrapper() {
         component={HomeScreen}
         options={{
           tabBarIcon: ({ color }) => (
-            <Ionicons name="home-outline" size={26} color={color} />
+            <Ionicons name="home-outline" size={24} color={color} />
           ),
         }}
       />
+
       <Tabs.Screen
         name="Lista"
-        // ✅ CAMBIO CLAVE: Usamos un Stack anidado para la lista
         component={AssetListStack}
         options={{
           tabBarIcon: ({ color }) => (
-            <Ionicons name="list-outline" size={26} color={color} />
+            <Ionicons name="list-outline" size={24} color={color} />
           ),
         }}
       />
+
       <Tabs.Screen
         name="Escanear"
         component={ScanAsset}
         options={{
           tabBarIcon: ({ color }) => (
-            <Ionicons name="qr-code-outline" size={26} color={color} />
+            <Ionicons name="qr-code-outline" size={24} color={color} />
           ),
         }}
       />
+
       <Tabs.Screen
-        name="Agregar" // MANTENIDO EN TABS
+        name="Agregar"
         component={AddAsset}
         options={{
           tabBarIcon: ({ color }) => (
-            <Ionicons name="add-circle-outline" size={30} color={color} />
+            <Ionicons name="add-circle-outline" size={28} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="Configuracion"
+        component={SettingsScreen}
+        options={{
+          tabBarLabel: "Ajustes",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="settings-outline" size={24} color={color} />
           ),
         }}
       />
@@ -110,16 +113,35 @@ function TabsWrapper() {
   );
 }
 
-/* -------------------------
-    APP PRINCIPAL CON STACK
--------------------------- */
+/* ----------------------------------------------------------------------
+   STACK PRINCIPAL
+---------------------------------------------------------------------- */
+function MainNavigator() {
+  const { user } = useUser();
+
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {!user ? (
+        <Stack.Screen name="Login" component={LoginScreen} />
+      ) : (
+        <>
+          <Stack.Screen name="Tabs" component={TabsWrapper} />
+          <Stack.Screen name="CrearUsuario" component={CreateUserScreen} />
+        </>
+      )}
+    </Stack.Navigator>
+  );
+}
+
+/* ----------------------------------------------------------------------
+   APP
+---------------------------------------------------------------------- */
 export default function App() {
   useEffect(() => {
     (async () => {
       try {
         const snapshot = await getDocs(collection(db, "activos"));
-        console.log("Firebase conectado. Activos encontrados:");
-        snapshot.forEach((doc) => console.log(doc.id, doc.data()));
+        console.log("Firebase conectado:", snapshot.size);
       } catch (error) {
         console.error("Error Firebase:", error);
       }
@@ -130,18 +152,7 @@ export default function App() {
     <SafeAreaProvider>
       <UserProvider>
         <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-
-            {/* 1. Tabs como pantalla principal (TODO el contenido vive aquí) */}
-            <Stack.Screen name="Tabs" component={TabsWrapper} />
-
-            {/* ❌ ELIMINADO: Estas pantallas se movieron DENTRO de Tabs (o sus Stacks anidados) 
-                para asegurar que la barra de pestañas NUNCA desaparezca. */}
-
-            {/* <Stack.Screen name="AddAsset" component={AddAsset} ... /> */}
-            {/* <Stack.Screen name="AssetDetail" component={AssetDetail} ... /> */}
-
-          </Stack.Navigator>
+          <MainNavigator />
         </NavigationContainer>
       </UserProvider>
     </SafeAreaProvider>
