@@ -1,258 +1,237 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, Text, TextInput, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Modal, FlatList, Pressable } from "react-native";
+import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Modal, FlatList, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useRoute, useNavigation, useFocusEffect, RouteProp } from "@react-navigation/native";
-import { StackNavigationProp } from "@react-navigation/stack";
+import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import { addAsset, getAsset, getAllAssets } from "../api/assets";
+import { getCategories } from "../api/categories";
+import { getLocations } from "../api/locations";
+import { useUser } from "../context/UserContext";
 import { Asset } from "../types/Asset";
 
-// --- Tipado y Opciones ---
-type RootStackParamList = {
-  AddAsset: { assetId?: number } | undefined;
-  AssetDetail: { assetId: number; edited?: boolean } | undefined;
-  AssetList?: undefined;
-};
-type AddAssetNavProp = StackNavigationProp<RootStackParamList, "AddAsset">;
-type AssetKey = keyof Asset;
-type ErrorRecord = Record<string, string>;
-
-const CATEGORIES = ["Equipos", "Mobiliario", "Vehículos", "Otros"];
 const STATES = ["Activo", "En mantenimiento", "Baja"];
-const LOCATIONS = ["Almacén Central", "Oficina A", "Oficina B", "Planta", "Otro"];
 
 const initialState: Asset = {
   id: 0, nombre: "", categoria: "", estado: "", ubicacion: "", descripcion: "", observacion: "",
   fechaAdquisicion: new Date().toISOString().split("T")[0], fechaRegistro: new Date().toISOString(),
-  costoInicial: undefined, depreciacionAnual: undefined,
+  costoInicial: undefined, depreciacionAnual: undefined, 
+  cantidad: 1, // 1️⃣ Aseguramos valor inicial 1
 };
 
-// --- Componentes Reutilizables ---
-const Field = ({ label, children, error }: { label: string; children: React.ReactNode; error?: string }) => (
-  <View style={styles.fieldWrapper}>
-    <Text style={styles.fieldLabel}>{label}</Text>
-    {children}
-    {error ? <Text style={styles.fieldError}>{error}</Text> : null}
+const InputField = ({ label, value, error, onPress, children, disabled }: any) => (
+  <View style={styles.fW}>
+    <Text style={styles.fL}>{label}</Text>
+    {onPress ? (
+      <TouchableOpacity 
+        style={[styles.sel, error && styles.iE, disabled && { opacity: 0.6 }]} 
+        onPress={onPress} 
+        disabled={disabled}
+      >
+        <Text style={[styles.selT, !value && styles.sP]}>{value || "Seleccionar..."}</Text>
+        <Ionicons name={label.includes("Fecha") ? "calendar-outline" : "chevron-down"} size={18} color="#999" />
+      </TouchableOpacity>
+    ) : children}
+    {error ? <Text style={styles.fE}>{error}</Text> : null}
   </View>
 );
-const SelectField = ({ label, value, error, placeholder, onPress }: { label: string; value: string; error?: string; placeholder: string; onPress: () => void; }) => (
-  <Field label={label} error={error}>
-    <TouchableOpacity style={[styles.select, error && styles.inputError]} onPress={onPress}>
-      <Text style={[styles.selectText, !value && styles.selectPlaceholder]}>{value || placeholder}</Text>
-      <Ionicons name="chevron-down" size={18} color="#999" />
-    </TouchableOpacity>
-  </Field>
-);
 
-// --- Componente Principal ---
 export default function AddAsset() {
-  const route = useRoute<RouteProp<RootStackParamList, "AddAsset">>();
-  const navigation = useNavigation<AddAssetNavProp>();
-  const { assetId } = route.params || {};
-
+  const route = useRoute<any>(), navigation = useNavigation<any>(), { assetId } = route.params || {};
+  const { user } = useUser();
+  
   const [asset, setAsset] = useState<Asset>(initialState);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [locations, setLocations] = useState<string[]>([]);
   const [savedAsset, setSavedAsset] = useState<Asset | null>(null);
-  const [errors, setErrors] = useState<ErrorRecord>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [loadingAsset, setLoadingAsset] = useState(false);
   const [totalAssets, setTotalAssets] = useState<number | null>(null);
-  const [showUpdatedMessage, setShowUpdatedMessage] = useState(false);
+  const [pick, setPick] = useState({ visible: false, title: "", data: [] as string[], field: "" });
+  const [showDP, setShowDP] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [pickerVisible, setPickerVisible] = useState(false);
-  const [pickerOptions, setPickerOptions] = useState<string[]>([]);
-  const [pickerTitle, setPickerTitle] = useState("");
-  const [pickerField, setPickerField] = useState<AssetKey | null>(null);
 
-  // --- Utils ---
-  const displayDate = (iso: string) => { const d = new Date(iso); return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()}`; };
-  const capitalizeWords = (s = "") => s.split(/\s+/).map((w) => (w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : "")).join(" ");
-  const requiredNonEmpty = (v: any) => (v === undefined || v === null || String(v).trim() === "");
-  const isValidDecimal = (val: string) => /^\d+(\.\d{1,2})?$/.test(val);
+  const isEditing = Boolean(assetId);
+  const canEditDate = user?.role === "admin" || !isEditing;
 
-  // --- Validación y Manejo de Cambios ---
-  const validateField = useCallback((field: AssetKey, value: any) => {
-    let errorMsg = "";
-    const val = String(value ?? "").trim();
-    const numValue = Number(val);
-
-    switch (field) {
-      case "nombre":
-        if (requiredNonEmpty(value)) errorMsg = "El nombre es obligatorio.";
-        else if (!/^[A-Za-zÁÉÍÓÚÑáéíóúñ ]+$/.test(val)) errorMsg = "Solo letras, sin números.";
-        else if (val.length < 3) errorMsg = "Mínimo 3 caracteres."; break;
-      case "categoria": if (requiredNonEmpty(value)) errorMsg = "Obligatoria."; else if (!CATEGORIES.includes(value)) errorMsg = "Inválida."; break;
-      case "estado": if (requiredNonEmpty(value)) errorMsg = "Obligatorio."; else if (!STATES.includes(value)) errorMsg = "Inválido."; break;
-      case "ubicacion": if (requiredNonEmpty(value)) errorMsg = "Obligatoria."; else if (!LOCATIONS.includes(value)) errorMsg = "Inválida."; break;
-      case "fechaAdquisicion":
-        if (requiredNonEmpty(value)) errorMsg = "Obligatoria.";
-        else if (new Date(val) > new Date()) errorMsg = "No puede ser futura."; break;
-      case "costoInicial":
-        if (requiredNonEmpty(value)) errorMsg = "Obligatorio.";
-        else if (val.startsWith("0") && val.length > 1) errorMsg = "No debe iniciar con 0.";
-        else if (isNaN(numValue) || numValue <= 0) errorMsg = "Debe ser > 0.";
-        else if (!isValidDecimal(val)) errorMsg = "Máx. 2 decimales."; break;
-      case "depreciacionAnual":
-        if (!requiredNonEmpty(value)) {
-          if (isNaN(numValue) || numValue < 0 || numValue > 100) errorMsg = "Debe ser entre 0 y 100.";
-          else if (!isValidDecimal(val)) errorMsg = "Máx. 2 decimales.";
-        } break;
-      case "descripcion": case "observacion": if (val.length > 500) errorMsg = "Máx. 500 caracteres."; break;
+  const validate = (f: keyof Asset, v: any) => {
+    let m = ""; const val = String(v ?? "").trim();
+    if (["nombre", "categoria", "estado", "ubicacion", "costoInicial", "cantidad"].includes(f) && !val) {
+      m = "Obligatorio";
+    } else if (f === "nombre" && !/^[A-Za-zÁÉÍÓÚÑáéíóúñ ]+$/.test(val)) {
+      m = "Solo letras";
+    } else if (f === "costoInicial" && (isNaN(Number(val)) || Number(val) <= 0)) {
+      m = "Debe ser > 0";
+    } else if (f === "cantidad" && (isNaN(Number(val)) || Number(val) <= 0)) {
+      m = "Debe ser mayor a 0";
     }
-    setErrors((p) => ({ ...p, [field]: errorMsg }));
-    return errorMsg === "";
-  }, []);
-
-  const handleChange = (field: AssetKey, value: any) => {
-    let formatted = value;
-    if (field === "costoInicial" || field === "depreciacionAnual") formatted = String(value).replace(/[^0-9.]/g, "");
-    else if (typeof value === "string") formatted = capitalizeWords(value);
-    setAsset((p) => ({ ...p, [field]: formatted }));
-    validateField(field, formatted);
+    setErrors(p => ({ ...p, [f]: m })); return !m;
   };
 
-  const handleDateChange = (_: any, selected?: Date) => {
-    setShowDatePicker(false);
-    if (selected) handleChange("fechaAdquisicion", selected.toISOString().split("T")[0]);
+  const handleChange = (f: keyof Asset, v: any) => {
+    let val = ["costoInicial", "depreciacionAnual", "cantidad"].includes(f) 
+      ? String(v).replace(/[^0-9.]/g, "") 
+      : v;
+    if (typeof v === "string" && f === "nombre") {
+      val = v.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    }
+    setAsset(p => ({ ...p, [f]: val })); validate(f, val);
   };
 
-  const openPicker = (field: AssetKey, title: string, opts: string[]) => {
-    setPickerField(field); setPickerTitle(title); setPickerOptions(opts); setPickerVisible(true);
-  };
-
-  const onPickerSelect = (value: string) => {
-    if (pickerField) handleChange(pickerField, value);
-    setPickerVisible(false);
-  };
-
-  const validateForm = () => {
-    const fields: AssetKey[] = ["nombre", "categoria", "estado", "ubicacion", "costoInicial", "fechaAdquisicion", "depreciacionAnual", "descripcion", "observacion"];
-    return fields.every((f) => validateField(f, (asset as any)[f])) && Object.values(errors).every((e) => !e);
-  };
-
-  // --- Efectos de Carga ---
-  useEffect(() => { // Carga Inicial
-    getAllAssets().then((all) => setTotalAssets(Array.isArray(all) ? all.length : null)).catch(() => setTotalAssets(null));
-  }, []);
-
-  useFocusEffect( // Resetear en modo Creación
-    useCallback(() => { if (!assetId) { setAsset(initialState); setSavedAsset(null); setErrors({}); } }, [assetId])
-  );
-
-  useEffect(() => { // Cargar Activo para Edición
-    if (assetId) {
-      setLoadingAsset(true);
-      getAsset(assetId).then((existing) => {
-        if (existing) { setAsset(existing); setSavedAsset(existing); }
-      }).finally(() => setLoadingAsset(false));
+  useEffect(() => {
+    getCategories().then(data => setCategories(data.map((c: any) => c.name)));
+    getLocations().then(data => setLocations(data.map((l: any) => l.name)));
+    getAllAssets().then(all => setTotalAssets(all.length));
+    
+    if (assetId) { 
+      setLoading(true); 
+      getAsset(assetId)
+        .then(ex => { 
+          if(ex) { 
+            // 2️⃣ FIX CLAVE: Asegurar cantidad al cargar
+            setAsset({
+              ...ex,
+              cantidad: ex.cantidad ?? 1
+            }); 
+            setSavedAsset(ex); 
+          } 
+        })
+        .finally(() => setLoading(false)); 
     }
   }, [assetId]);
 
-  // --- Guardado y Navegación ---
-  const showToast = () => {
-    setShowUpdatedMessage(true);
-    Animated.sequence([Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }), Animated.delay(1400), Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true })]).start(() => setShowUpdatedMessage(false));
-  };
+  useFocusEffect(useCallback(() => { 
+    if (!assetId) { setAsset(initialState); setSavedAsset(null); setErrors({}); } 
+  }, [assetId]));
 
   const handleSave = async () => {
-  if (!validateForm()) return;
-  setLoading(true);
-  try {
-    const toSave: Asset = {
-      ...asset,
-      costoInicial: Number(asset.costoInicial) || 0,
-      depreciacionAnual: Number(asset.depreciacionAnual) || 0,
-      fechaRegistro: assetId ? asset.fechaRegistro : new Date().toISOString(),
-    };
-    const newId = await addAsset(toSave);
-    const saved = { ...toSave, id: newId };
-    setSavedAsset(saved);
+    const fields: (keyof Asset)[] = ["nombre", "categoria", "estado", "ubicacion", "costoInicial", "cantidad"];
+    if (!fields.every(f => validate(f, asset[f]))) return;
+    setLoading(true);
+    try {
+      // 3️⃣ ASEGURAR CONVERSIÓN AL GUARDAR
+      const toSave = { 
+        ...asset, 
+        cantidad: Number(asset.cantidad) || 1,
+        costoInicial: Number(asset.costoInicial), 
+        depreciacionAnual: Number(asset.depreciacionAnual) || 0 
+      };
+      const id = await addAsset(toSave);
+      setSavedAsset({ ...toSave, id }); setTotalAssets(p => (p ?? 0) + 1);
+      
+      Animated.sequence([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }), 
+        Animated.delay(1500), 
+        Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true })
+      ]).start(() => {
+        if (isEditing) {
+          navigation.navigate("AssetDetail", { assetId });
+        }
+      });
 
-    // 🔹 Actualizar total de activos localmente
-    setTotalAssets((prev) => (prev ?? 0) + 1);
-
-    // 🔹 Mostrar toast de guardado
-    showToast();
-
-    // 🔹 Resetear formulario solo si es creación
-    if (!assetId) {
-      setAsset(initialState);
-      setErrors({});
-    }
-  } catch (error) {
-    console.error("Error al guardar activo:", error);
-  } finally {
-    setLoading(false);
-  }
-};
-
-
-  if (loadingAsset) return (<View style={styles.center}><ActivityIndicator size="large" color="#1E88E5" /><Text style={{ marginTop: 10, color: "#444" }}>Cargando activo...</Text></View>);
-  const isInvalid = loading || Object.values(errors).some((e) => e);
+      if (!assetId) { setAsset(initialState); setErrors({}); }
+    } catch (e) { console.log(e); } finally { setLoading(false); }
+  };
 
   return (
-    <KeyboardAvoidingView style={styles.fullScreen} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      {/* 🔵 HEADER */}
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: "#F5F7FA" }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={styles.header}>
-        <Ionicons name="menu" size={26} color="#FFF" />
-        <Text style={styles.headerTitle}>{assetId ? "Editar Activo" : "Registrar Activo"}</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={26} color="#FFF" />
+        </TouchableOpacity>
+        <Text style={styles.hT}>{assetId ? "Editar" : "Registrar"} Activo</Text>
         <View style={{ width: 26 }} />
       </View>
 
-      {/* 🔽 SCROLL CON EL FORMULARIO */}
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        {/* Total activos */}
-        <View style={styles.totalCard}>
-          <View><Text style={styles.totalLabel}>Total activos</Text><Text style={styles.totalNumber}>{totalAssets !== null ? totalAssets : "--"}</Text></View>
-          <TouchableOpacity style={styles.totalAction} onPress={() => navigation.navigate("AssetList")}>
-            <Ionicons name="layers-outline" size={20} color="#1565C0" /><Text style={styles.totalActionText}>Ver lista</Text>
+      <ScrollView contentContainerStyle={styles.cont} keyboardShouldPersistTaps="handled">
+        <View style={styles.tC}>
+          <View>
+            <Text style={{ color: "#666", fontSize: 13 }}>Total activos</Text>
+            <Text style={styles.tN}>{totalAssets ?? "--"}</Text>
+          </View>
+          <TouchableOpacity style={styles.r} onPress={() => navigation.navigate("AssetList")}>
+            <Ionicons name="layers-outline" size={20} color="#1565C0" />
+            <Text style={styles.at}>Ver lista</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Form card */}
-        <View style={styles.formCard}>
-          <Field label="Nombre" error={errors.nombre}><TextInput style={[styles.input, errors.nombre && styles.inputError]} value={asset.nombre} onChangeText={(v) => handleChange("nombre", v)} /></Field>
-          <SelectField label="Categoría" value={asset.categoria} error={errors.categoria} placeholder="Seleccionar categoría" onPress={() => openPicker("categoria", "Seleccionar categoría", CATEGORIES)} />
-          <SelectField label="Estado" value={asset.estado} error={errors.estado} placeholder="Seleccionar estado" onPress={() => openPicker("estado", "Seleccionar estado", STATES)} />
-          <SelectField label="Ubicación" value={asset.ubicacion} error={errors.ubicacion} placeholder="Seleccionar ubicación" onPress={() => openPicker("ubicacion", "Seleccionar ubicación", LOCATIONS)} />
+        <View style={styles.card}>
+          <InputField label="Nombre del Activo" error={errors.nombre}>
+            <TextInput style={[styles.in, errors.nombre && styles.iE]} value={asset.nombre} onChangeText={v => handleChange("nombre", v)} placeholder="Ej: Laptop Dell" />
+          </InputField>
 
-          {/* Fecha de adquisición */}
-          <Field label="Fecha de adquisición" error={errors.fechaAdquisicion}>
-            <TouchableOpacity style={[styles.select, errors.fechaAdquisicion && styles.inputError]} onPress={() => setShowDatePicker(true)}>
-              <Text style={styles.selectText}>{displayDate(asset.fechaAdquisicion)}</Text>
-              <Ionicons name="calendar-outline" size={18} color="#999" />
-            </TouchableOpacity>
-            {showDatePicker && <DateTimePicker value={new Date(asset.fechaAdquisicion)} mode="date" maximumDate={new Date()} display="default" onChange={handleDateChange} />}
-          </Field>
+          <InputField label="Cantidad" error={errors.cantidad}>
+            <TextInput 
+              style={[styles.in, errors.cantidad && styles.iE]} 
+              value={String(asset.cantidad)} // ✅ CORREGIDO: Sin fallback de string vacío
+              keyboardType="numeric" 
+              onChangeText={v => handleChange("cantidad", v)} 
+              placeholder="Ej: 1" 
+            />
+          </InputField>
 
-          <Field label="Costo inicial (USD)" error={errors.costoInicial}><TextInput style={[styles.input, errors.costoInicial && styles.inputError]} value={String(asset.costoInicial ?? "")} keyboardType="numeric" onChangeText={(v) => handleChange("costoInicial", v)} /></Field>
-          <Field label="Depreciación anual (%) (opcional)" error={errors.depreciacionAnual}><TextInput style={[styles.input, errors.depreciacionAnual && styles.inputError]} value={String(asset.depreciacionAnual ?? "")} keyboardType="numeric" onChangeText={(v) => handleChange("depreciacionAnual", v)} /></Field>
-          <Field label="Descripción" error={errors.descripcion}><TextInput style={[styles.input, styles.textArea, errors.descripcion && styles.inputError]} value={asset.descripcion ?? ""} onChangeText={(v) => handleChange("descripcion", v)} multiline /></Field>
-          <Field label="Observación" error={errors.observacion}><TextInput style={[styles.input, styles.textArea, errors.observacion && styles.inputError]} value={asset.observacion ?? ""} onChangeText={(v) => handleChange("observacion", v)} multiline /></Field>
+          <InputField label="Categoría" value={asset.categoria} error={errors.categoria} onPress={() => setPick({ visible: true, title: "Categoría", data: categories, field: "categoria" })} />
+          
+          <InputField label="Estado" value={asset.estado} error={errors.estado} onPress={() => setPick({ visible: true, title: "Estado", data: STATES, field: "estado" })} />
+          
+          <InputField 
+            label="Ubicación/Bodega" 
+            value={asset.ubicacion} 
+            error={errors.ubicacion} 
+            onPress={() => setPick({ visible: true, title: "Ubicación", data: locations, field: "ubicacion" })} 
+          />
+          {locations.length === 0 && (
+            <Text style={{ fontSize: 12, color: "#E53935", marginTop: -8, marginBottom: 10 }}>
+              No hay ubicaciones registradas. Contacte al administrador.
+            </Text>
+          )}
+          
+          <InputField label="Fecha de adquisición" value={asset.fechaAdquisicion} error={errors.fechaAdquisicion} disabled={!canEditDate} onPress={() => setShowDP(true)} />
+          
+          {showDP && canEditDate && (
+            <DateTimePicker 
+              value={new Date(asset.fechaAdquisicion)} 
+              mode="date" 
+              maximumDate={new Date()} 
+              onChange={(_, d) => { setShowDP(false); if(d) handleChange("fechaAdquisicion", d.toISOString().split("T")[0]); }} 
+            />
+          )}
 
-          {/* Botón de Guardar */}
-          <TouchableOpacity style={[styles.saveButton, isInvalid && styles.disabledButton]} onPress={handleSave} disabled={isInvalid}>
+          <InputField label="Costo inicial (USD)" error={errors.costoInicial}>
+            <TextInput style={[styles.in, errors.costoInicial && styles.iE]} value={String(asset.costoInicial ?? "")} keyboardType="numeric" onChangeText={v => handleChange("costoInicial", v)} placeholder="0.00" />
+          </InputField>
+
+          <InputField label="Descripción">
+            <TextInput style={[styles.in, { minHeight: 60 }]} value={asset.descripcion} onChangeText={v => handleChange("descripcion", v)} multiline placeholder="Detalles técnicos..." />
+          </InputField>
+
+          <InputField label="Observación">
+            <TextInput style={[styles.in, { minHeight: 60 }]} value={asset.observacion} onChangeText={v => handleChange("observacion", v)} multiline placeholder="Notas adicionales..." />
+          </InputField>
+
+          <TouchableOpacity style={[styles.btn, loading && { opacity: 0.7 }]} onPress={handleSave} disabled={loading}>
             <Ionicons name="save-outline" size={20} color="#FFF" />
-            <Text style={styles.saveText}>{loading ? "Guardando..." : assetId ? "Guardar cambios" : "Registrar activo"}</Text>
+            <Text style={styles.btnT}>{loading ? "Guardando..." : "Guardar"}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Toast y ID Box */}
-        {showUpdatedMessage && (<Animated.View style={[styles.updateToast, { opacity: fadeAnim }]}><Ionicons name="checkmark-circle" size={18} color="#fff" /><Text style={styles.updateToastText}>Activo guardado correctamente</Text></Animated.View>)}
-        {savedAsset && (<View style={styles.qrBox}><Text style={styles.qrLabel}>Activo guardado — ID: {savedAsset.id}</Text></View>)}
-        <View style={{ height: 20 }} />
+        <Animated.View style={[styles.toast, { opacity: fadeAnim }]}>
+          <Text style={{ color: "#fff" }}>¡Guardado con éxito!</Text>
+        </Animated.View>
       </ScrollView>
 
-      {/* Picker modal */}
-      <Modal visible={pickerVisible} transparent animationType="slide">
-        <Pressable style={styles.modalOverlay} onPress={() => setPickerVisible(false)}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{pickerTitle}</Text>
-            <FlatList data={pickerOptions} keyExtractor={(i) => i} renderItem={({ item }) => (
-              <TouchableOpacity style={styles.modalItem} onPress={() => onPickerSelect(item)}>
-                <Text style={styles.modalItemText}>{item}</Text>
-              </TouchableOpacity>
-            )} />
+      <Modal visible={pick.visible} transparent animationType="slide">
+        <Pressable style={styles.mO} onPress={() => setPick({ ...pick, visible: false })}>
+          <View style={styles.mC}>
+            <Text style={styles.mT}>{pick.title}</Text>
+            <FlatList 
+              data={pick.data} 
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.mI} onPress={() => { handleChange(pick.field as any, item); setPick({ ...pick, visible: false }); }}>
+                  <Text>{item}</Text>
+                </TouchableOpacity>
+              )} 
+            />
           </View>
         </Pressable>
       </Modal>
@@ -260,45 +239,29 @@ export default function AddAsset() {
   );
 }
 
-// --- Estilos ---
 const styles = StyleSheet.create({
-  container: { padding: 18, paddingBottom: 36, backgroundColor: "#F5F7FA" },
-  header: { backgroundColor: "#1E88E5", paddingTop: 50, paddingBottom: 15, paddingHorizontal: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 4, elevation: 4, marginBottom: 12 },
-  headerTitle: { color: "#FFF", fontSize: 22, fontWeight: "700" },
-  totalCard: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 14, marginBottom: 14, flexDirection: "row", justifyContent: "space-between", alignItems: "center", shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
-  totalLabel: { color: "#666", fontSize: 13 },
-  totalNumber: { color: "#1E88E5", fontSize: 28, fontWeight: "700" },
-  totalAction: { flexDirection: "row", alignItems: "center" },
-  totalActionText: { color: "#1565C0", marginLeft: 8, fontWeight: "600" },
-  formCard: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 16, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
-
-  fieldWrapper: { marginBottom: 14 },
-  fieldLabel: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 8 },
-  input: { backgroundColor: "#F9FBFF", padding: 12, borderRadius: 12, borderWidth: 1, borderColor: "#E6EEF9", fontSize: 16 },
-  inputError: { borderColor: "#E74C3C" },
-  textArea: { minHeight: 100, textAlignVertical: "top" },
-  fieldError: { color: "#E74C3C", marginTop: 6, fontSize: 13 },
-
-  select: { backgroundColor: "#F9FBFF", paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: "#E6EEF9", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  selectText: { color: "#111", fontSize: 16 },
-  selectPlaceholder: { color: "#9AA6B2" },
-
-  saveButton: { backgroundColor: "#1E88E5", paddingVertical: 14, borderRadius: 12, marginTop: 8, flexDirection: "row", justifyContent: "center", alignItems: "center" },
-  saveText: { color: "#fff", marginLeft: 8, fontWeight: "700" },
-  disabledButton: { opacity: 0.7 },
-
-  updateToast: { marginTop: 12, backgroundColor: "#2E7D32", padding: 12, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center" },
-  updateToastText: { color: "#fff", marginLeft: 8, fontWeight: "600" },
-
-  qrBox: { marginTop: 12, backgroundColor: "#FFFFFF", padding: 14, borderRadius: 12, alignItems: "center", elevation: 2 },
-  qrLabel: { fontWeight: "600", marginBottom: 8 },
-
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  fullScreen: { flex: 1, backgroundColor: "#F5F7FA" },
-
-  modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" },
-  modalCard: { backgroundColor: "#fff", padding: 16, borderTopLeftRadius: 12, borderTopRightRadius: 12, maxHeight: "50%" },
-  modalTitle: { fontSize: 16, fontWeight: "700", marginBottom: 8 },
-  modalItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F1F3F6" },
-  modalItemText: { fontSize: 16 },
+  header: { backgroundColor: "#1E88E5", paddingTop: 50, paddingBottom: 15, paddingHorizontal: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, elevation: 4 },
+  backBtn: { padding: 4 },
+  hT: { color: "#FFF", fontSize: 20, fontWeight: "700" },
+  cont: { padding: 18 },
+  tC: { backgroundColor: "#FFF", borderRadius: 14, padding: 14, marginBottom: 14, flexDirection: "row", justifyContent: "space-between", alignItems: "center", elevation: 2 },
+  tN: { color: "#1E88E5", fontSize: 26, fontWeight: "700" },
+  r: { flexDirection: "row", alignItems: "center" },
+  at: { color: "#1565C0", marginLeft: 8, fontWeight: "600" },
+  card: { backgroundColor: "#FFF", borderRadius: 16, padding: 16, elevation: 2 },
+  fW: { marginBottom: 12 },
+  fL: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 5 },
+  in: { backgroundColor: "#F9FBFF", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#E6EEF9", color: "#333" },
+  sel: { backgroundColor: "#F9FBFF", padding: 12, borderRadius: 10, borderWidth: 1, borderColor: "#E6EEF9", flexDirection: "row", justifyContent: "space-between" },
+  selT: { fontSize: 15, color: "#333" },
+  sP: { color: "#9AA6B2" }, 
+  iE: { borderColor: "#E74C3C" }, 
+  fE: { color: "#E74C3C", fontSize: 12, marginTop: 4 },
+  btn: { backgroundColor: "#1E88E5", padding: 14, borderRadius: 12, marginTop: 10, flexDirection: "row", justifyContent: "center" },
+  btnT: { color: "#fff", marginLeft: 8, fontWeight: "700" },
+  toast: { marginTop: 15, backgroundColor: "#2E7D32", padding: 12, borderRadius: 10, alignItems: "center" },
+  mO: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.4)" },
+  mC: { backgroundColor: "#fff", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "40%" },
+  mT: { fontSize: 18, fontWeight: "700", marginBottom: 10 },
+  mI: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: "#EEE" }
 });

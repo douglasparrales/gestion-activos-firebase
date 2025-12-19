@@ -21,6 +21,9 @@ import AssetDetail from "./src/screens/AssetDetail";
 import LoginScreen from "./src/screens/LoginScreen";
 import CreateUserScreen from "./src/screens/CreateUserScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
+import CategoryManager from "./src/screens/CategoryManager";
+import LocationManager from "./src/screens/LocationManager";
+
 
 // ---------------- NAVIGATORS ----------------
 const Tabs = createBottomTabNavigator();
@@ -43,7 +46,6 @@ function AssetListStack() {
 ---------------------------------------------------------------------- */
 function TabsWrapper() {
   const insets = useSafeAreaInsets();
-  const { user } = useUser();
 
   return (
     <Tabs.Navigator
@@ -126,8 +128,21 @@ function MainNavigator() {
       ) : (
         <>
           <Stack.Screen name="Tabs" component={TabsWrapper} />
-          <Stack.Screen name="CrearUsuario" component={CreateUserScreen} />
+
+          {/* SOLO ADMIN LLEGA AQUÍ DESDE SETTINGS */}
+          <Stack.Screen
+            name="CategoryManager"
+            component={CategoryManager}
+          />
+          <Stack.Screen name="LocationManager" component={LocationManager} />
+
+
+          <Stack.Screen
+            name="CrearUsuario"
+            component={CreateUserScreen}
+          />
         </>
+
       )}
     </Stack.Navigator>
   );

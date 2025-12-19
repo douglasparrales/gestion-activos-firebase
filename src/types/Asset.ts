@@ -8,6 +8,8 @@ export interface Asset {
   descripcion?: string;
   observacion?: string;
 
+  cantidad: number;
+
   fechaAdquisicion: string;
   fechaRegistro?: string;
 
