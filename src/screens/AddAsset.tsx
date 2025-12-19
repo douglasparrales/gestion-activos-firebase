@@ -15,7 +15,7 @@ const initialState: Asset = {
   id: 0, nombre: "", categoria: "", estado: "", ubicacion: "", descripcion: "", observacion: "",
   fechaAdquisicion: new Date().toISOString().split("T")[0], fechaRegistro: new Date().toISOString(),
   costoInicial: undefined, depreciacionAnual: undefined, 
-  cantidad: 1, // 1️⃣ Aseguramos valor inicial 1
+  cantidad: 1,
 };
 
 const InputField = ({ label, value, error, onPress, children, disabled }: any) => (
@@ -42,7 +42,6 @@ export default function AddAsset() {
   const [asset, setAsset] = useState<Asset>(initialState);
   const [categories, setCategories] = useState<string[]>([]);
   const [locations, setLocations] = useState<string[]>([]);
-  const [savedAsset, setSavedAsset] = useState<Asset | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [totalAssets, setTotalAssets] = useState<number | null>(null);
@@ -85,22 +84,13 @@ export default function AddAsset() {
     if (assetId) { 
       setLoading(true); 
       getAsset(assetId)
-        .then(ex => { 
-          if(ex) { 
-            // 2️⃣ FIX CLAVE: Asegurar cantidad al cargar
-            setAsset({
-              ...ex,
-              cantidad: ex.cantidad ?? 1
-            }); 
-            setSavedAsset(ex); 
-          } 
-        })
+        .then(ex => { if(ex) setAsset({ ...ex, cantidad: ex.cantidad ?? 1 }); })
         .finally(() => setLoading(false)); 
     }
   }, [assetId]);
 
   useFocusEffect(useCallback(() => { 
-    if (!assetId) { setAsset(initialState); setSavedAsset(null); setErrors({}); } 
+    if (!assetId) { setAsset(initialState); setErrors({}); } 
   }, [assetId]));
 
   const handleSave = async () => {
@@ -108,27 +98,32 @@ export default function AddAsset() {
     if (!fields.every(f => validate(f, asset[f]))) return;
     setLoading(true);
     try {
-      // 3️⃣ ASEGURAR CONVERSIÓN AL GUARDAR
       const toSave = { 
         ...asset, 
         cantidad: Number(asset.cantidad) || 1,
         costoInicial: Number(asset.costoInicial), 
         depreciacionAnual: Number(asset.depreciacionAnual) || 0 
       };
-      const id = await addAsset(toSave);
-      setSavedAsset({ ...toSave, id }); setTotalAssets(p => (p ?? 0) + 1);
       
+      const id = await addAsset(toSave);
+      
+      // Mostrar Toast de éxito
       Animated.sequence([
         Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }), 
-        Animated.delay(1500), 
+        Animated.delay(1200), 
         Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true })
       ]).start(() => {
+        // SI ESTAMOS EDITANDO: Volver al detalle del activo específico
         if (isEditing) {
-          navigation.navigate("AssetDetail", { assetId });
+          navigation.navigate("AssetDetail", { assetId: assetId });
+        } else {
+          // SI ES NUEVO: Limpiar formulario y actualizar contador
+          setAsset(initialState);
+          setErrors({});
+          getAllAssets().then(all => setTotalAssets(all.length));
         }
       });
 
-      if (!assetId) { setAsset(initialState); setErrors({}); }
     } catch (e) { console.log(e); } finally { setLoading(false); }
   };
 
@@ -148,7 +143,11 @@ export default function AddAsset() {
             <Text style={{ color: "#666", fontSize: 13 }}>Total activos</Text>
             <Text style={styles.tN}>{totalAssets ?? "--"}</Text>
           </View>
-          <TouchableOpacity style={styles.r} onPress={() => navigation.navigate("AssetList")}>
+          {/* BOTÓN "VER LISTA" CORREGIDO */}
+          <TouchableOpacity 
+            style={styles.r} 
+            onPress={() => navigation.navigate("Tabs", { screen: "Activos" })}
+          >
             <Ionicons name="layers-outline" size={20} color="#1565C0" />
             <Text style={styles.at}>Ver lista</Text>
           </TouchableOpacity>
@@ -160,30 +159,12 @@ export default function AddAsset() {
           </InputField>
 
           <InputField label="Cantidad" error={errors.cantidad}>
-            <TextInput 
-              style={[styles.in, errors.cantidad && styles.iE]} 
-              value={String(asset.cantidad)} // ✅ CORREGIDO: Sin fallback de string vacío
-              keyboardType="numeric" 
-              onChangeText={v => handleChange("cantidad", v)} 
-              placeholder="Ej: 1" 
-            />
+            <TextInput style={[styles.in, errors.cantidad && styles.iE]} value={String(asset.cantidad)} keyboardType="numeric" onChangeText={v => handleChange("cantidad", v)} placeholder="Ej: 1" />
           </InputField>
 
           <InputField label="Categoría" value={asset.categoria} error={errors.categoria} onPress={() => setPick({ visible: true, title: "Categoría", data: categories, field: "categoria" })} />
-          
           <InputField label="Estado" value={asset.estado} error={errors.estado} onPress={() => setPick({ visible: true, title: "Estado", data: STATES, field: "estado" })} />
-          
-          <InputField 
-            label="Ubicación/Bodega" 
-            value={asset.ubicacion} 
-            error={errors.ubicacion} 
-            onPress={() => setPick({ visible: true, title: "Ubicación", data: locations, field: "ubicacion" })} 
-          />
-          {locations.length === 0 && (
-            <Text style={{ fontSize: 12, color: "#E53935", marginTop: -8, marginBottom: 10 }}>
-              No hay ubicaciones registradas. Contacte al administrador.
-            </Text>
-          )}
+          <InputField label="Ubicación/Bodega" value={asset.ubicacion} error={errors.ubicacion} onPress={() => setPick({ visible: true, title: "Ubicación", data: locations, field: "ubicacion" })} />
           
           <InputField label="Fecha de adquisición" value={asset.fechaAdquisicion} error={errors.fechaAdquisicion} disabled={!canEditDate} onPress={() => setShowDP(true)} />
           

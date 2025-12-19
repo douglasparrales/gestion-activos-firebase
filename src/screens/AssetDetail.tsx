@@ -1,16 +1,15 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   View, Text, StyleSheet, ActivityIndicator,
-  TouchableOpacity, ScrollView, Alert
+  TouchableOpacity, ScrollView, Alert, StatusBar
 } from "react-native";
-import { MaterialIcons, FontAwesome5, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import QRCode from "react-native-qrcode-svg";
 import ViewShot from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
 
-// Tipos y APIs asumidas (Optimizadas)
 import { RootStackParamList } from "../types/navigation";
 import { Asset } from "../types/Asset";
 import { getAsset, deleteAsset } from "../api/assets";
@@ -18,16 +17,14 @@ import { getAsset, deleteAsset } from "../api/assets";
 type RouteProps = import("@react-navigation/native").RouteProp<RootStackParamList, "AssetDetail">;
 type NavProp = import("@react-navigation/stack").StackNavigationProp<RootStackParamList, "AssetDetail">;
 
-const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  "Equipos": <MaterialIcons name="computer" size={20} color="#1E88E5" />,
-  "Mobiliario": <FontAwesome5 name="chair" size={18} color="#43A047" />,
-  "Vehículos": <FontAwesome5 name="car" size={18} color="#F9A825" />,
-  "Otros": <MaterialIcons name="inventory" size={20} color="#E53935" />,
+const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  "Equipos": "laptop-outline",
+  "Vehículos": "car-outline",
+  "Otros": "laptop-outline",
 };
 
-const formatCurrency = (value: string | number | undefined) => `$${(Number(value) || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
-// Usamos Object.prototype.hasOwnProperty.call para un chequeo de categoría más seguro
-const getCategoryIcon = (cat: string): React.ReactNode => Object.prototype.hasOwnProperty.call(CATEGORY_ICONS, cat) ? CATEGORY_ICONS[cat] : CATEGORY_ICONS["Otros"];
+const formatCurrency = (value: string | number | undefined) => 
+  `$${(Number(value) || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function AssetDetail() {
   const route = useRoute<RouteProps>();
@@ -52,7 +49,7 @@ export default function AssetDetail() {
     const costoInicial = Number(asset.costoInicial) || 0;
     const depreciacionAnual = Number(asset.depreciacionAnual) || 0;
     const diffTime = new Date().getTime() - new Date(asset.fechaAdquisicion).getTime();
-    const anios = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365.25));
+    const anios = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365.25)));
     const depreciacionTotal = costoInicial * (depreciacionAnual / 100) * anios;
     const valorActual = Math.max(costoInicial - depreciacionTotal, 0);
     return { anios, depreciacionTotal, valorActual };
@@ -60,269 +57,253 @@ export default function AssetDetail() {
 
   const imprimirQR = async () => {
     try {
-      const viewShot = qrRef.current;
-
-      if (!viewShot || !viewShot.capture) {
-        Alert.alert("Error", "No se pudo generar el QR");
-        return;
-      }
-
-      // ✅ SIN argumentos
-      const uri = await viewShot.capture();
-
-      if (!uri) return;
-
-      const fileName = `QR_Activo_${asset?.id}.png`;
+      if (!qrRef.current?.capture) return Alert.alert("Error", "No se pudo generar el QR");
+      const uri = await qrRef.current.capture();
+      const fileName = `Etiqueta_${asset?.id}.png`;
       const newPath = FileSystem.documentDirectory + fileName;
-
-      await FileSystem.copyAsync({
-        from: uri,
-        to: newPath,
-      });
-
-      await Sharing.shareAsync(newPath, {
-        mimeType: "image/png",
-        dialogTitle: "Compartir código QR",
-      });
-
+      await FileSystem.copyAsync({ from: uri, to: newPath });
+      await Sharing.shareAsync(newPath, { mimeType: "image/png", dialogTitle: "Compartir Etiqueta" });
     } catch (error) {
-      console.error(error);
-      Alert.alert("Error", "No se pudo generar la imagen del QR");
+      Alert.alert("Error", "No se pudo procesar la imagen");
     }
   };
 
-
-
   const handleDelete = () => {
-    if (!asset) return;
-    Alert.alert("Eliminar activo", "¿Estás seguro? Esta acción es irreversible.",
-      [{ text: "Cancelar", style: "cancel" }, { text: "Eliminar", style: "destructive", onPress: async () => { await deleteAsset(asset.id); navigation.goBack(); } }]);
+    Alert.alert("Eliminar activo", "¿Estás seguro? Esta acción es irreversible.", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Eliminar", style: "destructive", onPress: async () => { await deleteAsset(assetId); navigation.goBack(); } }
+    ]);
   };
 
-  // Renderizado de carga y error (ya están correctos)
-  if (loading) return (<View style={styles.loader}><ActivityIndicator size="large" color="#1E88E5" /><Text style={styles.loadingText}>Cargando activo...</Text></View>);
-  if (!asset) return (<View style={styles.loader}><Text style={styles.errorText}>Activo no encontrado</Text></View>);
+  if (loading) return (
+    <View style={styles.loader}>
+      <ActivityIndicator size="large" color="#1E88E5" />
+      <Text style={styles.loadingText}>Cargando detalles...</Text>
+    </View>
+  );
 
-  // Componente DetailRow REFORZADO
-  const DetailRow = ({ label, value, icon, noBorder }: { label: string, value: string | number | undefined | null | boolean, icon?: React.ReactNode, noBorder?: boolean }) => {
-    // ✅ CORRECCIÓN CLAVE: Aseguramos que el valor de renderizado sea siempre una cadena
-    const displayValue = String(value || '') || '—';
-
-    return (
-      <View style={noBorder ? styles.detailRowNoBorder : styles.detailRow}>
-        <View style={styles.rowLabelContainer}>
-          {icon || null}
-          <Text style={styles.label}>{label}</Text>
-        </View>
-        {/* El contenido de Text es SIEMPRE una cadena no vacía */}
-        <Text style={[styles.value, label === 'Estado' && { color: displayValue === 'Activo' ? '#2E7D32' : '#F9A825', fontWeight: '600' }]}>{displayValue}</Text>
-      </View>
-    );
-  };
+  if (!asset) return (
+    <View style={styles.loader}>
+      <Ionicons name="alert-circle-outline" size={50} color="#D32F2F" />
+      <Text style={styles.errorText}>Activo no encontrado</Text>
+    </View>
+  );
 
   return (
     <View style={styles.safeArea}>
-      {/* 🔵 HEADER IGUAL A ASSETLIST */}
+      <StatusBar barStyle="light-content" />
+      
+      {/* HEADER CON BORDES REDONDEADOS */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={{ paddingHorizontal: 5 }} // Para hacer más fácil el toque
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={26} color="#FFF" />
         </TouchableOpacity>
-
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {/* ✅ REFUERZO: Aseguramos que asset.nombre sea string */}
-          {String(asset.nombre)}
-        </Text>
-
-        <View style={{ width: 26 }} /> {/* Espacio vacío para centrar mejor */}
+        <Text style={styles.headerTitle} numberOfLines={1}>{asset.nombre}</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.container}>
-        {/* CARD PRINCIPAL: Información general */}
-        <View style={styles.card}>
-          <Text style={styles.cardSectionTitle}>Información general</Text>
-
-          <DetailRow label="ID de activo" value={asset.id} icon={<Ionicons name="key-outline" size={20} color="#1E88E5" />} />
-
-          <DetailRow label="Categoría" value={asset.categoria} icon={getCategoryIcon(asset.categoria)} />
-          <DetailRow label="Estado" value={asset.estado} />
-          <DetailRow label="Ubicación" value={asset.ubicacion} />
-          <DetailRow label="Fecha adquisición" value={asset.fechaAdquisicion} noBorder />
+      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+        
+        {/* RESUMEN FINANCIERO */}
+        <View style={styles.heroCard}>
+            <Text style={styles.heroLabel}>Valor Actual</Text>
+            <Text style={styles.heroValue}>{formatCurrency(dep.valorActual)}</Text>
+            <View style={styles.heroDivider} />
+            <View style={styles.heroFooter}>
+                <View>
+                    <Text style={styles.heroSubLabel}>Costo Inicial</Text>
+                    <Text style={styles.heroSubValue}>{formatCurrency(asset.costoInicial)}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.heroSubLabel}>Antigüedad</Text>
+                    <Text style={styles.heroSubValue}>{dep.anios} años</Text>
+                </View>
+            </View>
         </View>
 
-        {/* CARD FINANCIERA */}
-        <View style={styles.cardFinancial}>
-          <Text style={styles.cardSectionTitleWhite}>Resumen financiero</Text>
-          <View style={styles.rowSpace}>
-            <Text style={styles.labelWhite}>Costo inicial</Text><Text style={styles.valueWhite}>{formatCurrency(asset.costoInicial)}</Text>
-          </View>
-          <View style={styles.rowSpace}>
-            <Text style={styles.labelWhite}>Depreciación anual</Text>
-            <Text style={styles.valueWhite}>{asset.depreciacionAnual ? `${String(asset.depreciacionAnual)}%` : "—"}</Text>
-          </View>
-          <View style={styles.separatorDark} />
-          <View style={styles.rowSpace}>
-            <Text style={styles.labelWhite}>Años depreciados</Text>
-            {/* ✅ CORRECCIÓN FINAL: Aseguramos que el número sea string */}
-            <Text style={styles.valueWhite}>{String(dep.anios)}</Text>
-          </View>
-          <View style={styles.rowSpace}>
-            <Text style={styles.labelWhite}>Depreciación total</Text><Text style={styles.valueWhite}>-{formatCurrency(dep.depreciacionTotal)}</Text>
-          </View>
-          <View style={styles.rowSpaceStrong}>
-            <Text style={styles.valueStrongWhite}>Valor actual</Text><Text style={styles.valueStrongWhite}>{formatCurrency(dep.valorActual)}</Text>
-          </View>
+        {/* FICHA TÉCNICA */}
+        <View style={styles.sectionHeader}>
+            <Ionicons name="list-circle-outline" size={22} color="#475569" />
+            <Text style={styles.sectionTitle}>Detalles Técnicos</Text>
         </View>
 
-        {/* QR SECTION */}
+        <View style={styles.infoCard}>
+            <InfoItem label="ID de Activo" value={String(asset.id)} icon="finger-print-outline" />
+            <InfoItem label="Categoría" value={asset.categoria} icon={CATEGORY_ICONS[asset.categoria] || "cube-outline"} />
+            <InfoItem label="Estado" value={asset.estado} icon="shield-checkmark-outline" isStatus />
+            <InfoItem label="Ubicación" value={asset.ubicacion} icon="location-outline" />
+        </View>
+
+        <View style={styles.sectionHeader}>
+            <Ionicons name="cart-outline" size={22} color="#475569" />
+            <Text style={styles.sectionTitle}>Datos de Adquisición</Text>
+        </View>
+        <View style={styles.infoCard}>
+            <InfoItem label="Fecha Adquisición" value={asset.fechaAdquisicion} icon="calendar-outline" />
+        </View>
+
+        {/* 🔳 SECCIÓN QR - ETIQUETA GRANDE E IDENTIFICABLE */}
         <View style={styles.qrContainer}>
           <ViewShot ref={qrRef} options={{ format: "png", quality: 1 }}>
             <View style={styles.qrBox}>
-
-              {/* Nombre del activo */}
               <Text style={styles.qrTitle} numberOfLines={2}>
-                {String(asset.nombre)}
+                {String(asset.nombre).toUpperCase()}
               </Text>
 
-              {/* Ubicación */}
               <Text style={styles.qrSubtitle}>
                 Ubicación: {String(asset.ubicacion || "—")}
               </Text>
 
-              {/* QR */}
-              <View style={{ marginVertical: 14 }}>
-                <QRCode value={String(asset.id)} size={160} />
+              <View style={styles.qrWrapper}>
+                {/* QR más grande que ocupa mejor el espacio */}
+                <QRCode value={String(asset.id)} size={200} />
               </View>
 
-              {/* ID */}
               <Text style={styles.qrId}>
-                ID: {String(asset.id)}
+                ID DE CONTROL: {String(asset.id)}
               </Text>
-
             </View>
           </ViewShot>
-
-          <Text style={styles.qrLabel}>Escanea para ver detalles del activo</Text>
+          <Text style={styles.qrLabel}>Escanea para ver detalles técnicos</Text>
         </View>
 
         {/* BOTONES DE ACCIÓN */}
-        <TouchableOpacity
-          style={styles.btnPrimary}
-          onPress={() =>
-            // Navega al Tab Navigator "Tabs" y especifica la pestaña "Agregar" 
-            // para llevar el AssetId
-            navigation.navigate("Tabs", {
-              screen: "Agregar",
-              params: { assetId: asset.id }
-            })
-          }
-        >
-          <Text style={styles.btnPrimaryText}>Editar activo</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btnSecondary} onPress={imprimirQR}>
-          <Text style={styles.btnSecondaryText}>Imprimir QR</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btnDanger} onPress={handleDelete}>
-          <Text style={styles.btnDangerText}>Eliminar activo</Text>
-        </TouchableOpacity>
-        <View style={{ height: 40 }} />
+        <View style={styles.actionContainer}>
+            <TouchableOpacity 
+                style={styles.btnEdit}
+                onPress={() => navigation.navigate("Tabs", { screen: "Agregar", params: { assetId: asset.id } })}
+            >
+                <Ionicons name="pencil" size={20} color="#FFF" />
+                <Text style={styles.btnEditText}>Editar Información</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.btnShare} onPress={imprimirQR}>
+                <Ionicons name="share-social-outline" size={20} color="#1E88E5" />
+                <Text style={styles.btnShareText}>Compartir Etiqueta QR</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.btnDelete} onPress={handleDelete}>
+                <Ionicons name="trash-outline" size={20} color="#D32F2F" />
+                <Text style={styles.btnDeleteText}>Eliminar Activo</Text>
+            </TouchableOpacity>
+        </View>
       </ScrollView>
     </View>
   );
 }
 
-/* ============================================================
-    🎨 ESTILOS (Súper compactados)
-============================================================ */
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F5F7FA" },
-  container: { padding: 20, paddingTop: 10 },
-  loader: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F5F7FA" },
-  loadingText: { marginTop: 12, fontSize: 15, color: "#5F6368", fontWeight: "400" },
-  errorText: { fontSize: 16, color: "#D32F2F", fontWeight: "500" },
+const InfoItem = ({ label, value, icon, noBorder, isStatus }: any) => (
+    <View style={[styles.infoRow, noBorder && { borderBottomWidth: 0 }]}>
+        <Ionicons name={icon} size={20} color="#64748B" style={{ width: 35 }} />
+        <View>
+            <Text style={styles.infoLabel}>{label}</Text>
+            <Text style={[styles.infoValue, isStatus && { color: value === 'Activo' ? '#2E7D32' : '#E65100' }]}>
+                {value || "No registrado"}
+            </Text>
+        </View>
+    </View>
+);
 
-  // 🚨 ESTILOS DEL HEADER
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#F8FAFC" },
+  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingText: { marginTop: 10, color: "#64748B", fontWeight: '500' },
+  errorText: { marginTop: 10, color: "#D32F2F", fontWeight: '700' },
+  
   header: {
     backgroundColor: "#1E88E5",
-    paddingTop: 50,
-    paddingBottom: 15,
+    paddingTop: 55, 
+    paddingBottom: 25, 
     paddingHorizontal: 20,
-
-    flexDirection: "row",
+    flexDirection: "row", 
+    alignItems: "center", 
     justifyContent: "space-between",
+    borderBottomLeftRadius: 30, // Bordes redondeados consistentes
+    borderBottomRightRadius: 30,
+  },
+  backButton: { width: 40, height: 40, justifyContent: 'center' },
+  headerTitle: { color: "#FFF", fontSize: 18, fontWeight: "800", flex: 1, textAlign: 'center' },
+
+  scrollContainer: { paddingHorizontal: 20, paddingBottom: 50 },
+
+  heroCard: { 
+    backgroundColor: "#1E293B", borderRadius: 24, padding: 24, marginTop: 20,
+    elevation: 4, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10 
+  },
+  heroLabel: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  heroValue: { color: "#FFF", fontSize: 32, fontWeight: '800', textAlign: 'center', marginVertical: 8 },
+  heroDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 15 },
+  heroFooter: { flexDirection: 'row', justifyContent: 'space-between' },
+  heroSubLabel: { color: "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  heroSubValue: { color: "#FFF", fontSize: 15, fontWeight: '700', marginTop: 2 },
+
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 30, marginBottom: 12 },
+  sectionTitle: { fontSize: 14, fontWeight: "800", color: "#475569", marginLeft: 8, textTransform: 'uppercase' },
+  infoCard: { backgroundColor: "#FFF", borderRadius: 20, padding: 10, elevation: 1 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
+  infoLabel: { fontSize: 11, color: "#94A3B8", fontWeight: '700', textTransform: 'uppercase' },
+  infoValue: { fontSize: 15, color: "#1E293B", fontWeight: '600', marginTop: 1 },
+
+  // ETIQUETA QR MEJORADA
+  qrContainer: { alignItems: "center", marginVertical: 30 },
+  qrBox: { 
+    backgroundColor: "#FFFFFF", 
+    padding: 30, 
+    borderRadius: 15, 
     alignItems: "center",
-
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 4,
+    borderWidth: 1.5,
+    borderColor: '#000', // Borde negro para guía de corte al imprimir
+    width: 300, 
   },
-  headerTitle: {
-    color: "#FFF",
-    fontSize: 22,
-    fontWeight: "700",
-    maxWidth: '75%', // Aumentado ligeramente el ancho
-  },
-  // 🚨 FIN ESTILOS DEL HEADER
-
-  // Cards
-  card: { backgroundColor: "#FFFFFF", padding: 20, borderRadius: 16, marginBottom: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  cardFinancial: { backgroundColor: "#1565C0", padding: 22, borderRadius: 16, marginBottom: 20, shadowColor: "#1565C0", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 5 },
-  cardSectionTitle: { fontSize: 16, fontWeight: "600", marginBottom: 16, color: "#202124", borderBottomWidth: 1, borderBottomColor: "#E0E0E0", paddingBottom: 8 },
-  cardSectionTitleWhite: { fontSize: 16, fontWeight: "600", marginBottom: 16, color: "#FFFFFF" },
-
-  // Rows
-  detailRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
-  detailRowNoBorder: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 10 },
-  rowSpace: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8 },
-  rowSpaceStrong: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "rgba(255, 255, 255, 0.3)" },
-  rowLabelContainer: { flexDirection: 'row', alignItems: 'center' },
-
-  // Typography & Separators
-  label: { color: "#5F6368", fontSize: 15, fontWeight: "400", marginLeft: 8 },
-  value: { color: "#202124", fontSize: 15, fontWeight: "500" },
-  labelWhite: { color: "rgba(255, 255, 255, 0.85)", fontSize: 15, fontWeight: "400" },
-  valueWhite: { color: "#FFFFFF", fontSize: 15, fontWeight: "500" },
-  valueStrongWhite: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
-  separatorDark: { height: 1, backgroundColor: "rgba(255, 255, 255, 0.25)", marginVertical: 10 },
-
-  // QR
-  qrContainer: { alignItems: "center", marginBottom: 30, marginTop: 10 },
-  qrBox: { backgroundColor: "#FFFFFF", padding: 20, borderRadius: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
-  qrLabel: { marginTop: 12, color: "#5F6368", fontSize: 14, fontWeight: "400" },
-
   qrTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#202124",
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#000",
     textAlign: "center",
-    marginBottom: 4,
+    marginBottom: 6,
   },
-
   qrSubtitle: {
-    fontSize: 13,
-    color: "#5F6368",
+    fontSize: 14,
+    color: "#333",
     textAlign: "center",
+    fontWeight: "600",
+    marginBottom: 20,
   },
-
+  qrWrapper: {
+    padding: 15,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#EEE',
+  },
   qrId: {
-    fontSize: 12,
-    color: "#5F6368",
-    marginTop: 6,
-    fontWeight: "500",
+    fontSize: 15,
+    color: "#000",
+    marginTop: 20,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+  },
+  qrLabel: { 
+    marginTop: 12, 
+    color: "#64748B", 
+    fontSize: 13, 
+    fontWeight: "500" 
   },
 
-
-  // Buttons
-  btnPrimary: { backgroundColor: "#1E88E5", paddingVertical: 16, borderRadius: 12, alignItems: "center", marginBottom: 12, shadowColor: "#1E88E5", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
-  btnPrimaryText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
-  btnSecondary: { backgroundColor: "#FFFFFF", paddingVertical: 16, borderRadius: 12, alignItems: "center", marginBottom: 12, borderWidth: 1.5, borderColor: "#BBDEFB", elevation: 1 },
-  btnSecondaryText: { color: "#1E88E5", fontSize: 16, fontWeight: "600" },
-  btnDanger: { backgroundColor: "#FFFFFF", paddingVertical: 16, borderRadius: 12, alignItems: "center", borderWidth: 1.5, borderColor: "#D32F2F", elevation: 1 },
-  btnDangerText: { color: "#D32F2F", fontSize: 16, fontWeight: "600" },
+  actionContainer: { marginTop: 20, gap: 12 },
+  btnEdit: { backgroundColor: "#1E88E5", flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 16 },
+  btnEditText: { color: "#FFF", fontWeight: '700', fontSize: 16, marginLeft: 10 },
+  btnShare: { backgroundColor: "#FFF", flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 16, borderWidth: 1.5, borderColor: '#E3F2FD' },
+  btnShareText: { color: "#1E88E5", fontWeight: '700', fontSize: 16, marginLeft: 10 },
+  btnDelete: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    paddingVertical: 16, 
+    borderRadius: 16, 
+    backgroundColor: '#FFF', 
+    borderWidth: 1, 
+    borderColor: "#FEE2E2",
+    marginHorizontal: 0 // Cambiado para evitar el error previo
+  },
+  btnDeleteText: { color: "#D32F2F", fontWeight: '700', fontSize: 16, marginLeft: 10 },
 });

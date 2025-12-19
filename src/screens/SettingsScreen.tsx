@@ -97,7 +97,7 @@ export default function SettingsScreen() {
                         <Text style={styles.sectionTitleSmall}>Registrar Nuevo Usuario</Text>
                         <TextInput placeholder="Nombre completo" value={name} onChangeText={setName} style={styles.input} />
                         <TextInput placeholder="Correo electrónico" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" style={styles.input} />
-                        <TextInput placeholder="Contraseña temporal" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+                        <TextInput placeholder="Contraseña" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
                         
                         <TouchableOpacity 
                             style={[styles.primaryButton, loading && { opacity: 0.7 }]} 

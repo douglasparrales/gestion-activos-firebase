@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  StatusBar
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -19,10 +20,7 @@ import { useUser } from "../context/UserContext";
 import { signOut } from "firebase/auth";
 import { auth } from "../services/firebaseConfig";
 
-type HomeScreenNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  "Tabs"
->;
+type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Tabs">;
 
 export default function HomeScreen() {
   const navigation = useNavigation<HomeScreenNavigationProp>();
@@ -31,7 +29,6 @@ export default function HomeScreen() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [categorias, setCategorias] = useState<Record<string, number>>({});
   const [estados, setEstados] = useState<Record<string, number>>({});
-  // 🔧 CAMBIO 1: Estado tipado correctamente
   const [ubicaciones, setUbicaciones] = useState<Record<string, number>>({});
   const [totalValor, setTotalValor] = useState(0);
 
@@ -45,22 +42,16 @@ export default function HomeScreen() {
     let valor = 0;
 
     data.forEach((item) => {
-      // 🔧 CAMBIO 4: Forzar números para evitar errores de cálculo
       const cantidad = Number(item.cantidad ?? 1);
       const costo = Number(item.costoInicial ?? 0);
-
-      // 💰 Valor total calculado con seguridad
       valor += costo * cantidad;
 
-      // 📦 Categorías
       const cat = item.categoria || "Otros";
       cats[cat] = (cats[cat] || 0) + cantidad;
 
-      // 📊 Estados
       const est = item.estado || "Desconocido";
       sts[est] = (sts[est] || 0) + cantidad;
 
-      // 📍 Ubicaciones
       const loc = item.ubicacion || "Sin ubicación";
       locs[loc] = (locs[loc] || 0) + cantidad;
     });
@@ -77,7 +68,6 @@ export default function HomeScreen() {
     }, [])
   );
 
-  // 🔧 CAMBIO 2: Tipar ubicacionTop para evitar errores de índice
   const ubicacionTop = Object.entries(ubicaciones).sort(
     (a, b) => b[1] - a[1]
   )[0] as [string, number] | undefined;
@@ -98,94 +88,98 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
+      <StatusBar barStyle="light-content" />
+      
+      {/* 🔵 HEADER REDISEÑADO */}
       <View style={styles.header}>
-        <TouchableOpacity
+        <TouchableOpacity 
+          style={styles.headerIconButton}
           onPress={() => navigation.navigate("Configuracion" as never)}
         >
-          <Ionicons name="settings-outline" size={26} color="#FFF" />
+          <Ionicons name="settings-sharp" size={24} color="#FFF" />
         </TouchableOpacity>
 
-        <View style={{ alignItems: "center" }}>
-          <Text style={styles.headerTitle}>Activos</Text>
-          <Text style={styles.headerUser}>
-            {user?.name} ({user?.role})
-          </Text>
-        </View>
-
-        <TouchableOpacity onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={26} color="#FFF" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView>
-
-        {/* 🔢 TOTAL ACTIVOS */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Total activos</Text>
-
-          <View style={styles.totalRow}>
-            <Text style={styles.totalNumber}>
-              {assets.reduce(
-                (sum, a) => sum + Number(a.cantidad ?? 1),
-                0
-              )}
-            </Text>
-
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() =>
-                navigation.navigate("Tabs", { screen: "Agregar" })
-              }
-            >
-              <Ionicons name="add" size={18} color="#1E88E5" />
-              <Text style={styles.addButtonText}>Agregar</Text>
-            </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Panel de Control</Text>
+          <View style={styles.userBadge}>
+            <Text style={styles.headerUser}>{user?.name} • {user?.role}</Text>
           </View>
         </View>
 
-        {/* 💰 VALOR TOTAL */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Valor total de activos</Text>
-          <Text style={styles.money}>
-            $
-            {totalValor.toLocaleString("es-ES", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </Text>
+        <TouchableOpacity style={styles.headerIconButton} onPress={handleLogout}>
+          <Ionicons name="log-out" size={24} color="#FFF" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        
+        {/* 🔢 SECCIÓN RESUMEN FINANCIERO / CANTIDAD */}
+        <View style={styles.summaryRow}>
+            <View style={[styles.miniCard, { backgroundColor: '#E3F2FD' }]}>
+                <Ionicons name="cube" size={24} color="#1E88E5" />
+                <Text style={styles.miniCardValue}>
+                    {assets.reduce((sum, a) => sum + Number(a.cantidad ?? 1), 0)}
+                </Text>
+                <Text style={styles.miniCardLabel}>Activos totales</Text>
+            </View>
+
+            <View style={[styles.miniCard, { backgroundColor: '#E8F5E9' }]}>
+                <Ionicons name="cash" size={24} color="#2E7D32" />
+                <Text style={[styles.miniCardValue, { color: '#2E7D32' }]}>
+                    ${totalValor.toLocaleString("es-ES", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </Text>
+                <Text style={styles.miniCardLabel}>Valor estimado</Text>
+            </View>
         </View>
 
-        {/* 📊 ESTADOS */}
-        <Text style={styles.sectionTitle}>Estados</Text>
+        <TouchableOpacity 
+            style={styles.addActionButton}
+            onPress={() => navigation.navigate("Tabs", { screen: "Agregar" })}
+        >
+            <Ionicons name="add-circle" size={22} color="#FFF" />
+            <Text style={styles.addActionButtonText}>Registrar Nuevo Activo</Text>
+        </TouchableOpacity>
+
+        {/* 📊 DISTRIBUCIÓN POR ESTADOS */}
+        <View style={styles.sectionHeader}>
+            <Ionicons name="pie-chart-outline" size={20} color="#475569" />
+            <Text style={styles.sectionTitle}>Estados de Conservación</Text>
+        </View>
         <View style={styles.card}>
           {Object.keys(estados).map((e) => (
             <View key={e} style={styles.row}>
               <Text style={styles.rowText}>{e}</Text>
-              <Text style={styles.rowNumber}>{estados[e]}</Text>
+              <View style={styles.badgeCount}>
+                <Text style={styles.badgeCountText}>{estados[e]}</Text>
+              </View>
             </View>
           ))}
         </View>
 
         {/* 📍 UBICACIÓN PRINCIPAL */}
-        <Text style={styles.sectionTitle}>Ubicación principal</Text>
-        <View style={styles.card}>
-          {/* 🔧 CAMBIO 3: Renderizado seguro */}
+        <View style={styles.sectionHeader}>
+            <Ionicons name="location-outline" size={20} color="#475569" />
+            <Text style={styles.sectionTitle}>Ubicación Principal</Text>
+        </View>
+        <View style={[styles.card, styles.topLocCard]}>
           {ubicacionTop ? (
-            <>
-              <Text style={styles.rowText}>{ubicacionTop[0]}</Text>
-              <Text style={styles.totalNumber}>{ubicacionTop[1]}</Text>
-            </>
+            <View style={styles.topLocContent}>
+              <Text style={styles.topLocName}>{ubicacionTop[0]}</Text>
+              <Text style={styles.topLocDesc}>{ubicacionTop[1]} activos en este lugar</Text>
+            </View>
           ) : (
-            <Text style={{ color: "#777" }}>Sin datos</Text>
+            <Text style={{ color: "#94A3B8" }}>No hay datos disponibles</Text>
           )}
         </View>
 
         {/* 📦 CATEGORÍAS */}
-        <Text style={styles.sectionTitle}>Categorías</Text>
+        <View style={styles.sectionHeader}>
+            <Ionicons name="grid-outline" size={20} color="#475569" />
+            <Text style={styles.sectionTitle}>Distribución por Categorías</Text>
+        </View>
         <View style={styles.card}>
-          {Object.keys(categorias).map((cat) => (
-            <View key={cat} style={styles.row}>
+          {Object.keys(categorias).map((cat, index) => (
+            <View key={cat} style={[styles.row, index === 0 ? { borderTopWidth: 0 } : null]}>
               <Text style={styles.rowText}>{cat}</Text>
               <Text style={styles.rowNumber}>{categorias[cat]}</Text>
             </View>
@@ -198,69 +192,72 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F7FA" },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  
+  // Header
   header: {
     backgroundColor: "#1E88E5",
-    paddingTop: 50,
-    paddingBottom: 15,
+    paddingTop: 55,
+    paddingBottom: 25,
     paddingHorizontal: 20,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
-  headerTitle: { color: "#FFF", fontSize: 22, fontWeight: "700" },
-  headerUser: { color: "#E3F2FD", fontSize: 12 },
+  headerCenter: { alignItems: "center" },
+  headerTitle: { color: "#FFF", fontSize: 18, fontWeight: "800", letterSpacing: 0.5 },
+  userBadge: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, marginTop: 5 },
+  headerUser: { color: "#FFF", fontSize: 11, fontWeight: '600' },
+  headerIconButton: { padding: 8 },
+
+  // Summary Row
+  summaryRow: { flexDirection: 'row', paddingHorizontal: 16, marginTop: 20, gap: 12 },
+  miniCard: { flex: 1, padding: 16, borderRadius: 20, alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
+  miniCardValue: { fontSize: 20, fontWeight: '800', color: '#1E88E5', marginTop: 8 },
+  miniCardLabel: { fontSize: 11, color: '#64748B', fontWeight: '600', marginTop: 2, textTransform: 'uppercase' },
+
+  // Botón Agregar
+  addActionButton: {
+    marginHorizontal: 16, marginTop: 16, backgroundColor: '#1E88E5',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 14, borderRadius: 16, elevation: 3
+  },
+  addActionButtonText: { color: '#FFF', fontWeight: '700', marginLeft: 8, fontSize: 15 },
+
+  // Secciones
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 25, marginLeft: 20, marginBottom: 10 },
+  sectionTitle: { fontSize: 15, fontWeight: "700", color: "#475569", marginLeft: 8 },
+
   card: {
     marginHorizontal: 16,
-    marginTop: 16,
     backgroundColor: "#FFF",
-    padding: 16,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    borderRadius: 20,
     elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
   },
-  cardTitle: { fontSize: 16, fontWeight: "600", color: "#333" },
-  totalRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 10,
-  },
-  totalNumber: {
-    fontSize: 36,
-    fontWeight: "700",
-    color: "#111",
-  },
-  addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E3F2FD",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  addButtonText: {
-    marginLeft: 6,
-    color: "#1E88E5",
-    fontWeight: "600",
-  },
-  money: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#2E7D32",
-    marginTop: 6,
-  },
-  sectionTitle: {
-    marginTop: 24,
-    marginLeft: 16,
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#222",
-  },
+
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 8,
+    alignItems: "center",
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9'
   },
-  rowText: { fontSize: 16 },
-  rowNumber: { fontSize: 16, fontWeight: "600", color: "#555" },
+  rowText: { fontSize: 15, color: '#334155', fontWeight: '500' },
+  rowNumber: { fontSize: 15, fontWeight: "700", color: "#1E293B" },
+  
+  badgeCount: { backgroundColor: '#F1F5F9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  badgeCountText: { fontSize: 13, fontWeight: '700', color: '#475569' },
+
+  // Ubicación Top
+  topLocCard: { paddingVertical: 20, backgroundColor: '#FFF', borderLeftWidth: 5, borderLeftColor: '#1E88E5' },
+  topLocContent: { justifyContent: 'center' },
+  topLocName: { fontSize: 18, fontWeight: '800', color: '#1E293B' },
+  topLocDesc: { fontSize: 13, color: '#64748B', marginTop: 2 }
 });
