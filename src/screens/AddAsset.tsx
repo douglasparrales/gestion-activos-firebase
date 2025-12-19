@@ -23,7 +23,7 @@ const InputField = ({ label, value, error, onPress, children, disabled }: any) =
     <Text style={styles.fL}>{label}</Text>
     {onPress ? (
       <TouchableOpacity 
-        style={[styles.sel, error && styles.iE, disabled && { opacity: 0.6 }]} 
+        style={[styles.sel, error && styles.iE, disabled && { opacity: 0.6, backgroundColor: "#F0F0F0" }]} 
         onPress={onPress} 
         disabled={disabled}
       >
@@ -50,7 +50,9 @@ export default function AddAsset() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const isEditing = Boolean(assetId);
-  const canEditDate = user?.role === "admin" || !isEditing;
+  // Solo admin puede editar fechas o porcentajes de depreciación en edición. 
+  // En creación (isEditing = false), cualquiera puede.
+  const canEditAdminFields = user?.role === "admin" || !isEditing;
 
   const validate = (f: keyof Asset, v: any) => {
     let m = ""; const val = String(v ?? "").trim();
@@ -62,6 +64,8 @@ export default function AddAsset() {
       m = "Debe ser > 0";
     } else if (f === "cantidad" && (isNaN(Number(val)) || Number(val) <= 0)) {
       m = "Debe ser mayor a 0";
+    } else if (f === "depreciacionAnual" && val !== "" && (isNaN(Number(val)) || Number(val) < 0 || Number(val) > 100)) {
+      m = "0 a 100%";
     }
     setErrors(p => ({ ...p, [f]: m })); return !m;
   };
@@ -96,28 +100,29 @@ export default function AddAsset() {
   const handleSave = async () => {
     const fields: (keyof Asset)[] = ["nombre", "categoria", "estado", "ubicacion", "costoInicial", "cantidad"];
     if (!fields.every(f => validate(f, asset[f]))) return;
+    
+    // Validar depreciación si se puso algo
+    if (asset.depreciacionAnual && !validate("depreciacionAnual", asset.depreciacionAnual)) return;
+
     setLoading(true);
     try {
       const toSave = { 
         ...asset, 
         cantidad: Number(asset.cantidad) || 1,
         costoInicial: Number(asset.costoInicial), 
-        depreciacionAnual: Number(asset.depreciacionAnual) || 0 
+        depreciacionAnual: asset.depreciacionAnual ? Number(asset.depreciacionAnual) : 0 
       };
       
-      const id = await addAsset(toSave);
+      await addAsset(toSave);
       
-      // Mostrar Toast de éxito
       Animated.sequence([
         Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }), 
         Animated.delay(1200), 
         Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true })
       ]).start(() => {
-        // SI ESTAMOS EDITANDO: Volver al detalle del activo específico
         if (isEditing) {
           navigation.navigate("AssetDetail", { assetId: assetId });
         } else {
-          // SI ES NUEVO: Limpiar formulario y actualizar contador
           setAsset(initialState);
           setErrors({});
           getAllAssets().then(all => setTotalAssets(all.length));
@@ -143,7 +148,6 @@ export default function AddAsset() {
             <Text style={{ color: "#666", fontSize: 13 }}>Total activos</Text>
             <Text style={styles.tN}>{totalAssets ?? "--"}</Text>
           </View>
-          {/* BOTÓN "VER LISTA" CORREGIDO */}
           <TouchableOpacity 
             style={styles.r} 
             onPress={() => navigation.navigate("Tabs", { screen: "Activos" })}
@@ -166,9 +170,9 @@ export default function AddAsset() {
           <InputField label="Estado" value={asset.estado} error={errors.estado} onPress={() => setPick({ visible: true, title: "Estado", data: STATES, field: "estado" })} />
           <InputField label="Ubicación/Bodega" value={asset.ubicacion} error={errors.ubicacion} onPress={() => setPick({ visible: true, title: "Ubicación", data: locations, field: "ubicacion" })} />
           
-          <InputField label="Fecha de adquisición" value={asset.fechaAdquisicion} error={errors.fechaAdquisicion} disabled={!canEditDate} onPress={() => setShowDP(true)} />
+          <InputField label="Fecha de adquisición" value={asset.fechaAdquisicion} error={errors.fechaAdquisicion} disabled={!canEditAdminFields} onPress={() => setShowDP(true)} />
           
-          {showDP && canEditDate && (
+          {showDP && canEditAdminFields && (
             <DateTimePicker 
               value={new Date(asset.fechaAdquisicion)} 
               mode="date" 
@@ -179,6 +183,18 @@ export default function AddAsset() {
 
           <InputField label="Costo inicial (USD)" error={errors.costoInicial}>
             <TextInput style={[styles.in, errors.costoInicial && styles.iE]} value={String(asset.costoInicial ?? "")} keyboardType="numeric" onChangeText={v => handleChange("costoInicial", v)} placeholder="0.00" />
+          </InputField>
+
+          {/* NUEVO CAMPO: DEPRECIACIÓN ANUAL */}
+          <InputField label="Depreciación Anual (%)" error={errors.depreciacionAnual}>
+            <TextInput 
+              style={[styles.in, errors.depreciacionAnual && styles.iE, !canEditAdminFields && { opacity: 0.6, backgroundColor: "#F0F0F0" }]} 
+              value={asset.depreciacionAnual !== undefined ? String(asset.depreciacionAnual) : ""} 
+              keyboardType="numeric" 
+              editable={canEditAdminFields}
+              onChangeText={v => handleChange("depreciacionAnual", v)} 
+              placeholder="Ej: 10" 
+            />
           </InputField>
 
           <InputField label="Descripción">
@@ -240,7 +256,7 @@ const styles = StyleSheet.create({
   fE: { color: "#E74C3C", fontSize: 12, marginTop: 4 },
   btn: { backgroundColor: "#1E88E5", padding: 14, borderRadius: 12, marginTop: 10, flexDirection: "row", justifyContent: "center" },
   btnT: { color: "#fff", marginLeft: 8, fontWeight: "700" },
-  toast: { marginTop: 15, backgroundColor: "#2E7D32", padding: 12, borderRadius: 10, alignItems: "center" },
+  toast: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: "#2E7D32", padding: 12, borderRadius: 10, alignItems: "center", elevation: 5 },
   mO: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.4)" },
   mC: { backgroundColor: "#fff", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "40%" },
   mT: { fontSize: 18, fontWeight: "700", marginBottom: 10 },
