@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   iE: { borderColor: COLORS.error, backgroundColor: '#FEF2F2' }, 
   fE: { color: COLORS.error, fontSize: 11, marginTop: 5, fontWeight: '500', marginLeft: 4 },
   btn: { 
-    backgroundColor: COLORS.primary, // Botón con el color azul brillante de interacción
+    backgroundColor: COLORS.accent, // Botón con el color azul brillante de interacción
     paddingVertical: 16, 
     borderRadius: 12, 
     marginTop: 15, 
