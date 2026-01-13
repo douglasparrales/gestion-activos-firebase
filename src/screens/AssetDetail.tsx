@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
-  View, Text, StyleSheet, ActivityIndicator,
+  View, StyleSheet, ActivityIndicator,
   TouchableOpacity, ScrollView, Alert, StatusBar
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,6 +9,11 @@ import QRCode from "react-native-qrcode-svg";
 import ViewShot from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
+
+// --- SISTEMA DE DISEÑO GLOBAL ---
+import { COLORS } from "../styles/theme";
+import { globalStyles } from "../styles/globalStyles";
+import { AppText } from "../components/AppText";
 
 import { RootStackParamList } from "../types/navigation";
 import { Asset } from "../types/Asset";
@@ -20,7 +25,7 @@ type NavProp = import("@react-navigation/stack").StackNavigationProp<RootStackPa
 const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   "Equipos": "laptop-outline",
   "Vehículos": "car-outline",
-  "Otros": "laptop-outline",
+  "Otros": "cube-outline",
 };
 
 const formatCurrency = (value: string | number | undefined) => 
@@ -77,94 +82,94 @@ export default function AssetDetail() {
 
   if (loading) return (
     <View style={styles.loader}>
-      <ActivityIndicator size="large" color="#1E88E5" />
-      <Text style={styles.loadingText}>Cargando detalles...</Text>
+      <ActivityIndicator size="large" color={COLORS.secondary} />
+      <AppText style={{ marginTop: 10 }} color={COLORS.textSecondary}>Cargando detalles...</AppText>
     </View>
   );
 
   if (!asset) return (
     <View style={styles.loader}>
-      <Ionicons name="alert-circle-outline" size={50} color="#D32F2F" />
-      <Text style={styles.errorText}>Activo no encontrado</Text>
+      <Ionicons name="alert-circle-outline" size={50} color={COLORS.error} />
+      <AppText bold style={{ marginTop: 10 }} color={COLORS.error}>Activo no encontrado</AppText>
     </View>
   );
 
   return (
-    <View style={styles.safeArea}>
+    <View style={globalStyles.screen}>
       <StatusBar barStyle="light-content" />
       
-      {/* HEADER CON BORDES REDONDEADOS */}
+      {/* HEADER COHERENTE */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={26} color="#FFF" />
+          <Ionicons name="chevron-back" size={26} color={COLORS.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{asset.nombre}</Text>
+        <AppText bold size={18} color={COLORS.white} style={{ flex: 1, textAlign: 'center' }} numberOfLines={1}>
+          {asset.nombre}
+        </AppText>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         
-        {/* RESUMEN FINANCIERO */}
+        {/* RESUMEN FINANCIERO (MODERNO) */}
         <View style={styles.heroCard}>
-            <Text style={styles.heroLabel}>Valor Actual</Text>
-            <Text style={styles.heroValue}>{formatCurrency(dep.valorActual)}</Text>
+            <AppText size={12} color="rgba(255,255,255,0.7)" style={{ textAlign: 'center' }}>VALOR ACTUAL ESTIMADO</AppText>
+            <AppText bold size={34} color={COLORS.white} style={{ textAlign: 'center', marginVertical: 5 }}>
+              {formatCurrency(dep.valorActual)}
+            </AppText>
             <View style={styles.heroDivider} />
-            <View style={styles.heroFooter}>
+            <View style={globalStyles.rowBetween}>
                 <View>
-                    <Text style={styles.heroSubLabel}>Costo Inicial</Text>
-                    <Text style={styles.heroSubValue}>{formatCurrency(asset.costoInicial)}</Text>
+                    <AppText bold size={10} color="rgba(255,255,255,0.5)">COSTO INICIAL</AppText>
+                    <AppText bold size={16} color={COLORS.white}>{formatCurrency(asset.costoInicial)}</AppText>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.heroSubLabel}>Antigüedad</Text>
-                    <Text style={styles.heroSubValue}>{dep.anios} años</Text>
+                    <AppText bold size={10} color="rgba(255,255,255,0.5)">ANTIGÜEDAD</AppText>
+                    <AppText bold size={16} color={COLORS.white}>{dep.anios} Años</AppText>
                 </View>
             </View>
         </View>
 
         {/* FICHA TÉCNICA */}
         <View style={styles.sectionHeader}>
-            <Ionicons name="list-circle-outline" size={22} color="#475569" />
-            <Text style={styles.sectionTitle}>Detalles Técnicos</Text>
+            <AppText bold size={12} color={COLORS.textSecondary}>FICHA TÉCNICA</AppText>
         </View>
 
-        <View style={styles.infoCard}>
+        <View style={globalStyles.card}>
             <InfoItem label="ID de Activo" value={String(asset.id)} icon="finger-print-outline" />
             <InfoItem label="Categoría" value={asset.categoria} icon={CATEGORY_ICONS[asset.categoria] || "cube-outline"} />
             <InfoItem label="Estado" value={asset.estado} icon="shield-checkmark-outline" isStatus />
-            <InfoItem label="Ubicación" value={asset.ubicacion} icon="location-outline" />
+            <InfoItem label="Ubicación" value={asset.ubicacion} icon="location-outline" noBorder />
         </View>
 
         <View style={styles.sectionHeader}>
-            <Ionicons name="cart-outline" size={22} color="#475569" />
-            <Text style={styles.sectionTitle}>Datos de Adquisición</Text>
+            <AppText bold size={12} color={COLORS.textSecondary}>ADQUISICIÓN</AppText>
         </View>
-        <View style={styles.infoCard}>
-            <InfoItem label="Fecha Adquisición" value={asset.fechaAdquisicion} icon="calendar-outline" />
+        <View style={globalStyles.card}>
+            <InfoItem label="Fecha de Compra" value={asset.fechaAdquisicion} icon="calendar-outline" noBorder />
         </View>
 
-        {/* 🔳 SECCIÓN QR - ETIQUETA GRANDE E IDENTIFICABLE */}
-        <View style={styles.qrContainer}>
+        {/* 🔳 SECCIÓN QR PROFESIONAL */}
+        <View style={styles.qrSection}>
           <ViewShot ref={qrRef} options={{ format: "png", quality: 1 }}>
             <View style={styles.qrBox}>
-              <Text style={styles.qrTitle} numberOfLines={2}>
+              <AppText bold size={16} color={COLORS.primary} style={{ textAlign: 'center', marginBottom: 2 }}>
                 {String(asset.nombre).toUpperCase()}
-              </Text>
-
-              <Text style={styles.qrSubtitle}>
-                Ubicación: {String(asset.ubicacion || "—")}
-              </Text>
-
+              </AppText>
+              <AppText size={11} color={COLORS.textSecondary} style={{ marginBottom: 15 }}>
+                {asset.ubicacion}
+              </AppText>
+              
               <View style={styles.qrWrapper}>
-                {/* QR más grande que ocupa mejor el espacio */}
-                <QRCode value={String(asset.id)} size={200} />
+                <QRCode value={String(asset.id)} size={180} color={COLORS.primary} />
               </View>
 
-              <Text style={styles.qrId}>
-                ID DE CONTROL: {String(asset.id)}
-              </Text>
+              <AppText bold size={14} color={COLORS.primary} style={{ marginTop: 15, letterSpacing: 2 }}>
+                ID: {asset.id}
+              </AppText>
             </View>
           </ViewShot>
-          <Text style={styles.qrLabel}>Escanea para ver detalles técnicos</Text>
+          <AppText size={12} color={COLORS.textMuted} style={{ marginTop: 10 }}>Etiqueta oficial de control de activos</AppText>
         </View>
 
         {/* BOTONES DE ACCIÓN */}
@@ -173,18 +178,18 @@ export default function AssetDetail() {
                 style={styles.btnEdit}
                 onPress={() => navigation.navigate("Tabs", { screen: "Agregar", params: { assetId: asset.id } })}
             >
-                <Ionicons name="pencil" size={20} color="#FFF" />
-                <Text style={styles.btnEditText}>Editar Información</Text>
+                <Ionicons name="pencil" size={20} color={COLORS.white} />
+                <AppText bold color={COLORS.white} style={{ marginLeft: 10 }}>Editar Información</AppText>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.btnShare} onPress={imprimirQR}>
-                <Ionicons name="share-social-outline" size={20} color="#1E88E5" />
-                <Text style={styles.btnShareText}>Compartir Etiqueta QR</Text>
+                <Ionicons name="share-social-outline" size={20} color={COLORS.secondary} />
+                <AppText bold color={COLORS.secondary} style={{ marginLeft: 10 }}>Compartir Etiqueta QR</AppText>
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.btnDelete} onPress={handleDelete}>
-                <Ionicons name="trash-outline" size={20} color="#D32F2F" />
-                <Text style={styles.btnDeleteText}>Eliminar Activo</Text>
+                <Ionicons name="trash-outline" size={20} color={COLORS.error} />
+                <AppText bold color={COLORS.error} style={{ marginLeft: 10 }}>Eliminar Activo</AppText>
             </TouchableOpacity>
         </View>
       </ScrollView>
@@ -192,118 +197,112 @@ export default function AssetDetail() {
   );
 }
 
+// Sub-componente InfoItem optimizado
 const InfoItem = ({ label, value, icon, noBorder, isStatus }: any) => (
     <View style={[styles.infoRow, noBorder && { borderBottomWidth: 0 }]}>
-        <Ionicons name={icon} size={20} color="#64748B" style={{ width: 35 }} />
-        <View>
-            <Text style={styles.infoLabel}>{label}</Text>
-            <Text style={[styles.infoValue, isStatus && { color: value === 'Activo' ? '#2E7D32' : '#E65100' }]}>
-                {value || "No registrado"}
-            </Text>
+        <View style={styles.iconCircle}>
+            <Ionicons name={icon} size={18} color={COLORS.secondary} />
+        </View>
+        <View style={{ flex: 1, marginLeft: 12 }}>
+            <AppText bold size={10} color={COLORS.textMuted}>{label.toUpperCase()}</AppText>
+            <AppText bold={isStatus} size={15} color={isStatus ? (value?.toLowerCase().includes('activo') ? '#10B981' : COLORS.error) : COLORS.textPrimary}>
+                {value || "—"}
+            </AppText>
         </View>
     </View>
 );
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F8FAFC" },
-  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
-  loadingText: { marginTop: 10, color: "#64748B", fontWeight: '500' },
-  errorText: { marginTop: 10, color: "#D32F2F", fontWeight: '700' },
-  
+  loader: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: COLORS.background },
   header: {
-    backgroundColor: "#1E88E5",
+    backgroundColor: COLORS.primary,
     paddingTop: 55, 
     paddingBottom: 25, 
     paddingHorizontal: 20,
     flexDirection: "row", 
     alignItems: "center", 
-    justifyContent: "space-between",
-    borderBottomLeftRadius: 30, // Bordes redondeados consistentes
+    borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },
   backButton: { width: 40, height: 40, justifyContent: 'center' },
-  headerTitle: { color: "#FFF", fontSize: 18, fontWeight: "800", flex: 1, textAlign: 'center' },
-
-  scrollContainer: { paddingHorizontal: 20, paddingBottom: 50 },
+  scrollContainer: { paddingHorizontal: 20, paddingBottom: 60 },
 
   heroCard: { 
-    backgroundColor: "#1E293B", borderRadius: 24, padding: 24, marginTop: 20,
-    elevation: 4, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10 
+    backgroundColor: COLORS.primary, 
+    borderRadius: 24, 
+    padding: 24, 
+    marginTop: 20,
+    elevation: 8,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 12
   },
-  heroLabel: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: '600', textAlign: 'center' },
-  heroValue: { color: "#FFF", fontSize: 32, fontWeight: '800', textAlign: 'center', marginVertical: 8 },
   heroDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 15 },
-  heroFooter: { flexDirection: 'row', justifyContent: 'space-between' },
-  heroSubLabel: { color: "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
-  heroSubValue: { color: "#FFF", fontSize: 15, fontWeight: '700', marginTop: 2 },
 
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 30, marginBottom: 12 },
-  sectionTitle: { fontSize: 14, fontWeight: "800", color: "#475569", marginLeft: 8, textTransform: 'uppercase' },
-  infoCard: { backgroundColor: "#FFF", borderRadius: 20, padding: 10, elevation: 1 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
-  infoLabel: { fontSize: 11, color: "#94A3B8", fontWeight: '700', textTransform: 'uppercase' },
-  infoValue: { fontSize: 15, color: "#1E293B", fontWeight: '600', marginTop: 1 },
+  sectionHeader: { marginTop: 25, marginBottom: 10, paddingLeft: 5 },
+  infoRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingVertical: 12, 
+    borderBottomWidth: 1, 
+    borderBottomColor: COLORS.border 
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
 
-  // ETIQUETA QR MEJORADA
-  qrContainer: { alignItems: "center", marginVertical: 30 },
+  qrSection: { alignItems: "center", marginVertical: 30 },
   qrBox: { 
-    backgroundColor: "#FFFFFF", 
-    padding: 30, 
-    borderRadius: 15, 
+    backgroundColor: COLORS.white, 
+    padding: 25, 
+    borderRadius: 20, 
     alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: '#000', // Borde negro para guía de corte al imprimir
-    width: 300, 
-  },
-  qrTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#000",
-    textAlign: "center",
-    marginBottom: 6,
-  },
-  qrSubtitle: {
-    fontSize: 14,
-    color: "#333",
-    textAlign: "center",
-    fontWeight: "600",
-    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    width: 280,
+    elevation: 2
   },
   qrWrapper: {
-    padding: 15,
-    backgroundColor: '#FFF',
+    padding: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#EEE',
-  },
-  qrId: {
-    fontSize: 15,
-    color: "#000",
-    marginTop: 20,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-  },
-  qrLabel: { 
-    marginTop: 12, 
-    color: "#64748B", 
-    fontSize: 13, 
-    fontWeight: "500" 
+    borderColor: '#F1F5F9',
   },
 
-  actionContainer: { marginTop: 20, gap: 12 },
-  btnEdit: { backgroundColor: "#1E88E5", flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 16 },
-  btnEditText: { color: "#FFF", fontWeight: '700', fontSize: 16, marginLeft: 10 },
-  btnShare: { backgroundColor: "#FFF", flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 16, borderWidth: 1.5, borderColor: '#E3F2FD' },
-  btnShareText: { color: "#1E88E5", fontWeight: '700', fontSize: 16, marginLeft: 10 },
+  actionContainer: { marginTop: 10, gap: 12 },
+  btnEdit: { 
+    backgroundColor: COLORS.secondary, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    paddingVertical: 16, 
+    borderRadius: 16,
+    elevation: 2
+  },
+  btnShare: { 
+    backgroundColor: COLORS.white, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    paddingVertical: 16, 
+    borderRadius: 16, 
+    borderWidth: 1, 
+    borderColor: COLORS.secondary 
+  },
   btnDelete: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     justifyContent: 'center', 
     paddingVertical: 16, 
     borderRadius: 16, 
-    backgroundColor: '#FFF', 
+    backgroundColor: COLORS.white, 
     borderWidth: 1, 
-    borderColor: "#FEE2E2",
-    marginHorizontal: 0 // Cambiado para evitar el error previo
+    borderColor: COLORS.error 
   },
-  btnDeleteText: { color: "#D32F2F", fontWeight: '700', fontSize: 16, marginLeft: 10 },
 });

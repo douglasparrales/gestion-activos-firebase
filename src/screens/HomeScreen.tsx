@@ -1,189 +1,140 @@
 import React, { useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  StatusBar
-} from "react-native";
+// REVISA ESTA LÍNEA: Asegúrate de que StyleSheet venga de "react-native"
+import { View, TouchableOpacity, ScrollView, Alert, StatusBar, Dimensions, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 
-import { getAllAssets } from "../services/activosService";
-import { Asset } from "../types/Asset";
-import { RootStackParamList } from "../types/navigation";
+// 1. IMPORTAMOS NUESTROS NUEVOS ESTILOS GLOBALES
+import { COLORS } from "../styles/theme";
+import { globalStyles } from "../styles/globalStyles";
+import { AppText } from "../components/AppText";
 
+import { getAllAssets } from "../services/activosService";
+import { RootStackParamList } from "../types/navigation";
 import { useUser } from "../context/UserContext";
 import { signOut } from "firebase/auth";
 import { auth } from "../services/firebaseConfig";
 
-type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Tabs">;
+const { width } = Dimensions.get("window");
+
+// --- INTERFACES ---
+interface DashboardStats {
+  totalValor: number;
+  totalActivos: number;
+  cats: Record<string, number>;
+  sts: Record<string, number>;
+  locs: Record<string, number>;
+}
+
+type HomeScreenNavProp = StackNavigationProp<RootStackParamList, "Tabs">;
 
 export default function HomeScreen() {
-  const navigation = useNavigation<HomeScreenNavigationProp>();
+  const navigation = useNavigation<HomeScreenNavProp>();
   const { user, setUser } = useUser();
-
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [categorias, setCategorias] = useState<Record<string, number>>({});
-  const [estados, setEstados] = useState<Record<string, number>>({});
-  const [ubicaciones, setUbicaciones] = useState<Record<string, number>>({});
-  const [totalValor, setTotalValor] = useState(0);
+  const [data, setData] = useState<DashboardStats>({ 
+    totalValor: 0, totalActivos: 0, cats: {}, sts: {}, locs: {} 
+  });
 
   const loadData = async () => {
-    const data = await getAllAssets();
-    setAssets(data);
-
-    const cats: Record<string, number> = {};
-    const sts: Record<string, number> = {};
-    const locs: Record<string, number> = {};
-    let valor = 0;
-
-    data.forEach((item) => {
-      const cantidad = Number(item.cantidad ?? 1);
+    const assets = await getAllAssets();
+    const stats = assets.reduce((acc: DashboardStats, item) => {
+      const qty = Number(item.cantidad ?? 1);
       const costo = Number(item.costoInicial ?? 0);
-      valor += costo * cantidad;
-
-      const cat = item.categoria || "Otros";
-      cats[cat] = (cats[cat] || 0) + cantidad;
-
-      const est = item.estado || "Desconocido";
-      sts[est] = (sts[est] || 0) + cantidad;
-
-      const loc = item.ubicacion || "Sin ubicación";
-      locs[loc] = (locs[loc] || 0) + cantidad;
-    });
-
-    setCategorias(cats);
-    setEstados(sts);
-    setUbicaciones(locs);
-    setTotalValor(valor);
+      acc.totalValor += costo * qty;
+      acc.totalActivos += qty;
+      const c = item.categoria || "Otros";
+      const e = item.estado || "Desconocido";
+      const l = item.ubicacion || "Sin ubicación";
+      acc.cats[c] = (acc.cats[c] || 0) + qty;
+      acc.sts[e] = (acc.sts[e] || 0) + qty;
+      acc.locs[l] = (acc.locs[l] || 0) + qty;
+      return acc;
+    }, { totalValor: 0, totalActivos: 0, cats: {}, sts: {}, locs: {} });
+    setData(stats);
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [])
-  );
-
-  const ubicacionTop = Object.entries(ubicaciones).sort(
-    (a, b) => b[1] - a[1]
-  )[0] as [string, number] | undefined;
+  useFocusEffect(useCallback(() => { loadData(); }, []));
 
   const handleLogout = () => {
-    Alert.alert("Cerrar sesión", "¿Seguro que deseas salir?", [
+    Alert.alert("Finalizar Sesión", "¿Está seguro que desea cerrar el sistema?", [
       { text: "Cancelar", style: "cancel" },
-      {
-        text: "Salir",
-        style: "destructive",
-        onPress: async () => {
-          await signOut(auth);
-          setUser(null);
-        },
-      },
+      { text: "Cerrar Sesión", style: "destructive", onPress: async () => { await signOut(auth); setUser(null); } }
     ]);
   };
 
+  const topLoc = Object.entries(data.locs).sort((a, b) => b[1] - a[1])[0];
+
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <View style={globalStyles.screen}>
+      <StatusBar barStyle="dark-content" />
       
-      {/* 🔵 HEADER REDISEÑADO */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.headerIconButton}
-          onPress={() => navigation.navigate("Configuracion" as never)}
-        >
-          <Ionicons name="settings-sharp" size={24} color="#FFF" />
-        </TouchableOpacity>
-
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Panel de Control</Text>
-          <View style={styles.userBadge}>
-            <Text style={styles.headerUser}>{user?.name} • {user?.role}</Text>
-          </View>
+      {/* HEADER PROFESIONAL */}
+      <View style={[globalStyles.rowBetween, { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 15 }]}>
+        <View>
+          <AppText bold size={11} color={COLORS.textSecondary}>BIENVENIDO</AppText>
+          <AppText bold size={22}>{user?.name || "Administrador"}</AppText>
         </View>
-
-        <TouchableOpacity style={styles.headerIconButton} onPress={handleLogout}>
-          <Ionicons name="log-out" size={24} color="#FFF" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          {/* BOTÓN DE LOGOUT MEJORADO */}
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate("Configuracion" as never)}>
+            <Ionicons name="person-circle-outline" size={32} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         
-        {/* 🔢 SECCIÓN RESUMEN FINANCIERO / CANTIDAD */}
-        <View style={styles.summaryRow}>
-            <View style={[styles.miniCard, { backgroundColor: '#E3F2FD' }]}>
-                <Ionicons name="cube" size={24} color="#1E88E5" />
-                <Text style={styles.miniCardValue}>
-                    {assets.reduce((sum, a) => sum + Number(a.cantidad ?? 1), 0)}
-                </Text>
-                <Text style={styles.miniCardLabel}>Activos totales</Text>
-            </View>
-
-            <View style={[styles.miniCard, { backgroundColor: '#E8F5E9' }]}>
-                <Ionicons name="cash" size={24} color="#2E7D32" />
-                <Text style={[styles.miniCardValue, { color: '#2E7D32' }]}>
-                    ${totalValor.toLocaleString("es-ES", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                </Text>
-                <Text style={styles.miniCardLabel}>Valor estimado</Text>
-            </View>
+        {/* TARJETA DE PATRIMONIO */}
+        <View style={styles.mainCard}>
+          <AppText bold size={10} color="rgba(255,255,255,0.4)">CAPITAL TOTAL INVERTIDO</AppText>
+          <AppText bold size={34} color={COLORS.white}>${data.totalValor.toLocaleString("es-ES")}</AppText>
+          <View style={styles.cardInfoRow}>
+            <StatBox label="ACTIVOS" val={data.totalActivos} />
+            <StatBox label="CATEGORÍAS" val={Object.keys(data.cats).length} />
+            <StatBox label="UBICACIONES" val={Object.keys(data.locs).length} />
+          </View>
         </View>
 
-        <TouchableOpacity 
-            style={styles.addActionButton}
-            onPress={() => navigation.navigate("Tabs", { screen: "Agregar" })}
-        >
-            <Ionicons name="add-circle" size={22} color="#FFF" />
-            <Text style={styles.addActionButtonText}>Registrar Nuevo Activo</Text>
-        </TouchableOpacity>
-
-        {/* 📊 DISTRIBUCIÓN POR ESTADOS */}
-        <View style={styles.sectionHeader}>
-            <Ionicons name="pie-chart-outline" size={20} color="#475569" />
-            <Text style={styles.sectionTitle}>Estados de Conservación</Text>
+        {/* ESTADOS */}
+        <AppText bold style={styles.sectionTitle}>Estado de Conservación</AppText>
+        <View style={styles.statusGrid}>
+          {Object.entries(data.sts).map(([key, val]) => (
+            <View key={key} style={[globalStyles.card, { width: (width - 52) / 2, marginBottom: 12 }]}>
+              <AppText bold size={24}>{val}</AppText>
+              <AppText color={COLORS.textSecondary} size={12}>{key}</AppText>
+              <View style={[styles.indicator, { backgroundColor: key.toLowerCase().includes('excelente') || key.toLowerCase().includes('activo') ? COLORS.secondary : '#F59E0B' }]} />
+            </View>
+          ))}
         </View>
-        <View style={styles.card}>
-          {Object.keys(estados).map((e) => (
-            <View key={e} style={styles.row}>
-              <Text style={styles.rowText}>{e}</Text>
-              <View style={styles.badgeCount}>
-                <Text style={styles.badgeCountText}>{estados[e]}</Text>
+
+        {/* CATEGORÍAS */}
+        <AppText bold style={styles.sectionTitle}>Distribución por Categoría</AppText>
+        <View style={[globalStyles.card, { marginHorizontal: 20 }]}>
+          {Object.entries(data.cats).map(([cat, count]) => (
+            <View key={cat} style={{ marginBottom: 20 }}>
+              <View style={globalStyles.rowBetween}>
+                <AppText bold>{cat}</AppText>
+                <AppText bold color={COLORS.secondary}>{count} activos</AppText>
+              </View>
+              <View style={styles.progressContainer}>
+                <View style={[styles.progressBar, { width: `${(count / (data.totalActivos || 1)) * 100}%` }]} />
               </View>
             </View>
           ))}
         </View>
 
-        {/* 📍 UBICACIÓN PRINCIPAL */}
-        <View style={styles.sectionHeader}>
-            <Ionicons name="location-outline" size={20} color="#475569" />
-            <Text style={styles.sectionTitle}>Ubicación Principal</Text>
-        </View>
-        <View style={[styles.card, styles.topLocCard]}>
-          {ubicacionTop ? (
-            <View style={styles.topLocContent}>
-              <Text style={styles.topLocName}>{ubicacionTop[0]}</Text>
-              <Text style={styles.topLocDesc}>{ubicacionTop[1]} activos en este lugar</Text>
-            </View>
-          ) : (
-            <Text style={{ color: "#94A3B8" }}>No hay datos disponibles</Text>
-          )}
-        </View>
-
-        {/* 📦 CATEGORÍAS */}
-        <View style={styles.sectionHeader}>
-            <Ionicons name="grid-outline" size={20} color="#475569" />
-            <Text style={styles.sectionTitle}>Distribución por Categorías</Text>
-        </View>
-        <View style={styles.card}>
-          {Object.keys(categorias).map((cat, index) => (
-            <View key={cat} style={[styles.row, index === 0 ? { borderTopWidth: 0 } : null]}>
-              <Text style={styles.rowText}>{cat}</Text>
-              <Text style={styles.rowNumber}>{categorias[cat]}</Text>
-            </View>
-          ))}
+        {/* SEDE PRINCIPAL */}
+        <AppText bold style={styles.sectionTitle}>Sede Principal</AppText>
+        <View style={[globalStyles.card, { marginHorizontal: 20, flexDirection: 'row', alignItems: 'center' }]}>
+          <View style={styles.locIcon}><Ionicons name="business-sharp" size={22} color={COLORS.secondary} /></View>
+          <View>
+            <AppText bold size={16}>{topLoc ? topLoc[0] : "Sin registros"}</AppText>
+            <AppText size={13} color={COLORS.textSecondary}>{topLoc ? `${topLoc[1]} activos registrados` : "No hay datos"}</AppText>
+          </View>
         </View>
 
       </ScrollView>
@@ -191,73 +142,78 @@ export default function HomeScreen() {
   );
 }
 
+const StatBox = ({ label, val }: { label: string; val: number }) => (
+  <View>
+    <AppText bold size={9} color="rgba(255,255,255,0.35)">{label}</AppText>
+    <AppText bold size={17} color={COLORS.white}>{val}</AppText>
+  </View>
+);
+
+// ESTO DEBE FUNCIONAR SI StyleSheet VIENE DE "react-native"
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
-  
-  // Header
-  header: {
-    backgroundColor: "#1E88E5",
-    paddingTop: 55,
-    paddingBottom: 25,
-    paddingHorizontal: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+  logoutBtn: { 
+    padding: 8, 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: COLORS.border, 
+    backgroundColor: COLORS.surface 
   },
-  headerCenter: { alignItems: "center" },
-  headerTitle: { color: "#FFF", fontSize: 18, fontWeight: "800", letterSpacing: 0.5 },
-  userBadge: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, marginTop: 5 },
-  headerUser: { color: "#FFF", fontSize: 11, fontWeight: '600' },
-  headerIconButton: { padding: 8 },
-
-  // Summary Row
-  summaryRow: { flexDirection: 'row', paddingHorizontal: 16, marginTop: 20, gap: 12 },
-  miniCard: { flex: 1, padding: 16, borderRadius: 20, alignItems: 'center', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
-  miniCardValue: { fontSize: 20, fontWeight: '800', color: '#1E88E5', marginTop: 8 },
-  miniCardLabel: { fontSize: 11, color: '#64748B', fontWeight: '600', marginTop: 2, textTransform: 'uppercase' },
-
-  // Botón Agregar
-  addActionButton: {
-    marginHorizontal: 16, marginTop: 16, backgroundColor: '#1E88E5',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 14, borderRadius: 16, elevation: 3
+  mainCard: { 
+    marginHorizontal: 20, 
+    backgroundColor: COLORS.primary, 
+    borderRadius: 24, 
+    padding: 24, 
+    elevation: 8,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
   },
-  addActionButtonText: { color: '#FFF', fontWeight: '700', marginLeft: 8, fontSize: 15 },
-
-  // Secciones
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 25, marginLeft: 20, marginBottom: 10 },
-  sectionTitle: { fontSize: 15, fontWeight: "700", color: "#475569", marginLeft: 8 },
-
-  card: {
-    marginHorizontal: 16,
-    backgroundColor: "#FFF",
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+  cardInfoRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    marginTop: 15, 
+    borderTopWidth: 1, 
+    borderTopColor: 'rgba(255,255,255,0.1)', 
+    paddingTop: 18 
   },
-
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9'
+  sectionTitle: { 
+    fontSize: 16, 
+    color: COLORS.textPrimary, 
+    marginLeft: 24, 
+    marginTop: 28, 
+    marginBottom: 14 
   },
-  rowText: { fontSize: 15, color: '#334155', fontWeight: '500' },
-  rowNumber: { fontSize: 15, fontWeight: "700", color: "#1E293B" },
-  
-  badgeCount: { backgroundColor: '#F1F5F9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-  badgeCountText: { fontSize: 13, fontWeight: '700', color: '#475569' },
-
-  // Ubicación Top
-  topLocCard: { paddingVertical: 20, backgroundColor: '#FFF', borderLeftWidth: 5, borderLeftColor: '#1E88E5' },
-  topLocContent: { justifyContent: 'center' },
-  topLocName: { fontSize: 18, fontWeight: '800', color: '#1E293B' },
-  topLocDesc: { fontSize: 13, color: '#64748B', marginTop: 2 }
+  statusGrid: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    paddingHorizontal: 18, 
+    justifyContent: 'space-between' 
+  },
+  indicator: { 
+    height: 4, 
+    width: 28, 
+    borderRadius: 2, 
+    marginTop: 14 
+  },
+  progressContainer: { 
+    height: 7, 
+    backgroundColor: COLORS.background, 
+    borderRadius: 4, 
+    overflow: 'hidden', 
+    marginTop: 8 
+  },
+  progressBar: { 
+    height: '100%', 
+    backgroundColor: COLORS.secondary 
+  },
+  locIcon: { 
+    width: 46, 
+    height: 46, 
+    backgroundColor: '#EFF6FF', 
+    borderRadius: 14, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginRight: 16 
+  },
 });

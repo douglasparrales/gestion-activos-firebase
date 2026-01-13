@@ -1,42 +1,32 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React from "react";
 import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, Animated, Modal, FlatList, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
-import { addAsset, getAsset, getAllAssets } from "../api/assets";
-import { getCategories } from "../api/categories";
-import { getLocations } from "../api/locations";
-import { useUser } from "../context/UserContext";
-import { Asset } from "../types/Asset";
-
-const STATES = ["Activo", "En mantenimiento", "Baja"];
-
-const initialState: Asset = {
-  id: 0, 
-  nombre: "", 
-  categoria: "", 
-  estado: "", 
-  ubicacion: "", 
-  descripcion: "", 
-  observacion: "",
-  fechaAdquisicion: new Date().toISOString().split("T")[0], 
-  fechaRegistro: new Date().toISOString(),
-  costoInicial: undefined, 
-  depreciacionAnual: undefined, 
-  cantidad: 1,
-};
+import { useAddAsset, STATES } from "../hooks/useAddAsset";
+// Importamos tus estilos globales y colores
+import { COLORS } from '../styles/theme'; 
+import { globalStyles } from '../styles/globalStyles';
 
 const InputField = ({ label, value, error, onPress, children, disabled }: any) => (
-  <View style={styles.fW}>
+  <View style={globalStyles.inputGroup}>
     <Text style={styles.fL}>{label}</Text>
     {onPress ? (
       <TouchableOpacity 
-        style={[styles.sel, error && styles.iE, disabled && { opacity: 0.6, backgroundColor: "#F0F0F0" }]} 
+        activeOpacity={0.6}
+        style={[
+            styles.sel, 
+            error && styles.iE, 
+            disabled && { opacity: 0.6, backgroundColor: COLORS.background }
+        ]} 
         onPress={onPress} 
         disabled={disabled}
       >
         <Text style={[styles.selT, !value && styles.sP]}>{value || "Seleccionar..."}</Text>
-        <Ionicons name={label.includes("Fecha") ? "calendar-outline" : "chevron-down"} size={18} color="#999" />
+        <Ionicons 
+            name={label.includes("Fecha") ? "calendar" : "chevron-down"} 
+            size={18} 
+            color={COLORS.textMuted} 
+        />
       </TouchableOpacity>
     ) : children}
     {error ? <Text style={styles.fE}>{error}</Text> : null}
@@ -44,158 +34,84 @@ const InputField = ({ label, value, error, onPress, children, disabled }: any) =
 );
 
 export default function AddAsset() {
-  const route = useRoute<any>();
-  const navigation = useNavigation<any>();
-  const { assetId } = route.params || {};
-  const { user } = useUser();
-  
-  const [asset, setAsset] = useState<Asset>(initialState);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [locations, setLocations] = useState<string[]>([]);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
-  const [totalAssets, setTotalAssets] = useState<number | null>(null);
-  const [pick, setPick] = useState({ visible: false, title: "", data: [] as string[], field: "" });
-  const [showDP, setShowDP] = useState(false);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  const isEditing = Boolean(assetId);
-  const canEditAdminFields = user?.role === "admin" || !isEditing;
-
-  // EFECTO 1: Carga de catálogos iniciales
-  useEffect(() => {
-    getCategories().then(data => setCategories(data.map((c: any) => c.name)));
-    getLocations().then(data => setLocations(data.map((l: any) => l.name)));
-    getAllAssets().then(all => setTotalAssets(all.length));
-  }, []);
-
-  // EFECTO 2: Carga de datos si es edición o limpieza si no lo es
-  useEffect(() => {
-    if (assetId) { 
-      setLoading(true); 
-      getAsset(assetId)
-        .then(ex => { if(ex) setAsset({ ...ex, cantidad: ex.cantidad ?? 1 }); })
-        .finally(() => setLoading(false)); 
-    } else {
-      setAsset(initialState);
-      setErrors({});
-    }
-  }, [assetId]);
-
-  // EFECTO 3: Limpieza de parámetros al salir de la pantalla
-  useFocusEffect(
-    useCallback(() => {
-      if (!assetId) {
-        setAsset(initialState);
-        setErrors({});
-      }
-      return () => {
-        // Limpia el assetId de la ruta al salir para que la próxima vez entre limpio
-        navigation.setParams({ assetId: undefined });
-      };
-    }, [assetId, navigation])
-  );
-
-  const validate = (f: keyof Asset, v: any) => {
-    let m = ""; const val = String(v ?? "").trim();
-    if (["nombre", "categoria", "estado", "ubicacion", "costoInicial", "cantidad"].includes(f) && !val) {
-      m = "Obligatorio";
-    } else if (f === "nombre" && !/^[A-Za-zÁÉÍÓÚÑáéíóúñ0-9 ]+$/.test(val)) {
-      m = "Nombre inválido";
-    } else if (f === "costoInicial" && (isNaN(Number(val)) || Number(val) <= 0)) {
-      m = "Debe ser > 0";
-    } else if (f === "cantidad" && (isNaN(Number(val)) || Number(val) <= 0)) {
-      m = "Debe ser mayor a 0";
-    } else if (f === "depreciacionAnual" && val !== "" && (isNaN(Number(val)) || Number(val) < 0 || Number(val) > 100)) {
-      m = "0 a 100%";
-    }
-    setErrors(p => ({ ...p, [f]: m })); return !m;
-  };
-
-  const handleChange = (f: keyof Asset, v: any) => {
-    let val = ["costoInicial", "depreciacionAnual", "cantidad"].includes(f) 
-      ? String(v).replace(/[^0-9.]/g, "") 
-      : v;
-    
-    if (typeof v === "string" && f === "nombre") {
-      val = v.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-    }
-    
-    setAsset(p => ({ ...p, [f]: val })); 
-    validate(f, val);
-  };
-
-  const handleSave = async () => {
-    const fields: (keyof Asset)[] = ["nombre", "categoria", "estado", "ubicacion", "costoInicial", "cantidad"];
-    if (!fields.every(f => validate(f, asset[f]))) return;
-    
-    if (asset.depreciacionAnual && !validate("depreciacionAnual", asset.depreciacionAnual)) return;
-
-    setLoading(true);
-    try {
-      const toSave = { 
-        ...asset, 
-        cantidad: Number(asset.cantidad) || 1,
-        costoInicial: Number(asset.costoInicial), 
-        depreciacionAnual: asset.depreciacionAnual ? Number(asset.depreciacionAnual) : 0 
-      };
-      
-      await addAsset(toSave);
-      
-      Animated.sequence([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }), 
-        Animated.delay(1200), 
-        Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true })
-      ]).start(() => {
-        if (isEditing) {
-          navigation.setParams({ assetId: undefined });
-          navigation.navigate("AssetDetail", { assetId: assetId });
-        } else {
-          setAsset(initialState);
-          setErrors({});
-          getAllAssets().then(all => setTotalAssets(all.length));
-        }
-      });
-
-    } catch (e) { 
-      console.log(e); 
-    } finally { 
-      setLoading(false); 
-    }
-  };
+  const {
+    asset, categories, locations, errors, loading, totalAssets,
+    pick, setPick, showDP, setShowDP, fadeAnim, isEditing, canEditAdminFields,
+    handleChange, handleSave, navigation, assetId
+  } = useAddAsset();
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: "#F5F7FA" }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <KeyboardAvoidingView 
+        style={globalStyles.screen} 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      {/* HEADER AJUSTADO AL TEMA */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={26} color="#FFF" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.white} />
         </TouchableOpacity>
-        <Text style={styles.hT}>{isEditing ? "Editar" : "Registrar"} Activo</Text>
-        <View style={{ width: 26 }} />
+        <Text style={styles.hT}>{assetId ? "EDITAR" : "NUEVO"} ACTIVO</Text>
+        <View style={{ width: 40 }} /> 
       </View>
 
-      <ScrollView contentContainerStyle={styles.cont} keyboardShouldPersistTaps="handled">
-        <View style={styles.tC}>
-          <View>
-            <Text style={{ color: "#666", fontSize: 13 }}>Total activos registrados</Text>
-            <Text style={styles.tN}>{totalAssets ?? "--"}</Text>
+      <ScrollView 
+        contentContainerStyle={styles.cont} 
+        keyboardShouldPersistTaps="always"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* INDICADOR DE TOTAL USANDO SURFACE Y PRIMARY */}
+        <View style={[globalStyles.card, globalStyles.rowBetween, { marginBottom: 20 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="stats-chart" size={20} color={COLORS.accent} />
+            </View>
+            <View style={{ marginLeft: 12 }}>
+              <Text style={styles.tLabel}>Activos en sistema</Text>
+              <Text style={styles.tN}>{totalAssets ?? "--"}</Text>
+            </View>
           </View>
         </View>
 
-        <View style={styles.card}>
+        <View style={globalStyles.card}>
           <InputField label="Nombre del Activo" error={errors.nombre}>
-            <TextInput style={[styles.in, errors.nombre && styles.iE]} value={asset.nombre} onChangeText={v => handleChange("nombre", v)} placeholder="Ej: Laptop Dell" />
+            <TextInput 
+                style={[styles.in, errors.nombre && styles.iE]} 
+                value={asset.nombre} 
+                onChangeText={v => handleChange("nombre", v)} 
+                placeholder="Ej: Laptop Dell XPS" 
+                placeholderTextColor={COLORS.textMuted}
+            />
           </InputField>
 
-          <InputField label="Cantidad" error={errors.cantidad}>
-            <TextInput style={[styles.in, errors.cantidad && styles.iE]} value={String(asset.cantidad)} keyboardType="numeric" onChangeText={v => handleChange("cantidad", v)} placeholder="Ej: 1" />
-          </InputField>
+          <View style={styles.row}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+                <InputField label="Cantidad" error={errors.cantidad}>
+                    <TextInput 
+                        style={[styles.in, errors.cantidad && styles.iE]} 
+                        value={String(asset.cantidad)} 
+                        keyboardType="numeric" 
+                        onChangeText={v => handleChange("cantidad", v)} 
+                    />
+                </InputField>
+            </View>
+            <View style={{ flex: 1.5 }}>
+                <InputField label="Costo (USD)" error={errors.costoInicial}>
+                    <TextInput 
+                        style={[styles.in, errors.costoInicial && styles.iE]} 
+                        value={String(asset.costoInicial ?? "")} 
+                        keyboardType="numeric" 
+                        onChangeText={v => handleChange("costoInicial", v)} 
+                        placeholder="0.00" 
+                    />
+                </InputField>
+            </View>
+          </View>
 
-          <InputField label="Categoría" value={asset.categoria} error={errors.categoria} onPress={() => setPick({ visible: true, title: "Categoría", data: categories, field: "categoria" })} />
-          <InputField label="Estado" value={asset.estado} error={errors.estado} onPress={() => setPick({ visible: true, title: "Estado", data: STATES, field: "estado" })} />
-          <InputField label="Ubicación/Bodega" value={asset.ubicacion} error={errors.ubicacion} onPress={() => setPick({ visible: true, title: "Ubicación", data: locations, field: "ubicacion" })} />
+          <InputField label="Categoría" value={asset.categoria} error={errors.categoria} onPress={() => setPick({ visible: true, title: "Seleccionar Categoría", data: categories, field: "categoria" })} />
+          <InputField label="Estado Actual" value={asset.estado} error={errors.estado} onPress={() => setPick({ visible: true, title: "Seleccionar Estado", data: STATES, field: "estado" })} />
+          <InputField label="Ubicación" value={asset.ubicacion} error={errors.ubicacion} onPress={() => setPick({ visible: true, title: "Seleccionar Ubicación", data: locations, field: "ubicacion" })} />
           
-          <InputField label="Fecha de adquisición" value={asset.fechaAdquisicion} error={errors.fechaAdquisicion} disabled={!canEditAdminFields} onPress={() => setShowDP(true)} />
+          <InputField label="Fecha de Adquisición" value={asset.fechaAdquisicion} error={errors.fechaAdquisicion} disabled={!canEditAdminFields} onPress={() => setShowDP(true)} />
           
           {showDP && canEditAdminFields && (
             <DateTimePicker 
@@ -206,13 +122,9 @@ export default function AddAsset() {
             />
           )}
 
-          <InputField label="Costo inicial (USD)" error={errors.costoInicial}>
-            <TextInput style={[styles.in, errors.costoInicial && styles.iE]} value={String(asset.costoInicial ?? "")} keyboardType="numeric" onChangeText={v => handleChange("costoInicial", v)} placeholder="0.00" />
-          </InputField>
-
           <InputField label="Depreciación Anual (%)" error={errors.depreciacionAnual}>
             <TextInput 
-              style={[styles.in, errors.depreciacionAnual && styles.iE, !canEditAdminFields && { opacity: 0.6, backgroundColor: "#F0F0F0" }]} 
+              style={[styles.in, errors.depreciacionAnual && styles.iE, !canEditAdminFields && { backgroundColor: COLORS.background, color: COLORS.textMuted }]} 
               value={asset.depreciacionAnual !== undefined ? String(asset.depreciacionAnual) : ""} 
               keyboardType="numeric" 
               editable={canEditAdminFields}
@@ -222,39 +134,67 @@ export default function AddAsset() {
           </InputField>
 
           <InputField label="Descripción">
-            <TextInput style={[styles.in, { minHeight: 60 }]} value={asset.descripcion} onChangeText={v => handleChange("descripcion", v)} multiline placeholder="Detalles técnicos..." />
+            <TextInput 
+                style={[styles.in, styles.textArea]} 
+                value={asset.descripcion} 
+                onChangeText={v => handleChange("descripcion", v)} 
+                multiline 
+                placeholder="Especificaciones técnicas..." 
+            />
           </InputField>
 
-          <InputField label="Observación">
-            <TextInput style={[styles.in, { minHeight: 60 }]} value={asset.observacion} onChangeText={v => handleChange("observacion", v)} multiline placeholder="Notas adicionales..." />
+          <InputField label="Observaciones">
+            <TextInput 
+                style={[styles.in, styles.textArea]} 
+                value={asset.observacion} 
+                onChangeText={v => handleChange("observacion", v)} 
+                multiline 
+                placeholder="Notas sobre el estado actual..." 
+            />
           </InputField>
 
-          <TouchableOpacity style={[styles.btn, loading && { opacity: 0.7 }]} onPress={handleSave} disabled={loading}>
-            <Ionicons name={loading ? "refresh-outline" : "save-outline"} size={20} color="#FFF" />
-            <Text style={styles.btnT}>{loading ? "Guardando..." : "Guardar Activo"}</Text>
+          <TouchableOpacity 
+            activeOpacity={0.8}
+            style={[styles.btn, loading && { opacity: 0.6 }]} 
+            onPress={handleSave} 
+            disabled={loading}
+          >
+            {loading ? (
+                <Text style={styles.btnT}>Procesando...</Text>
+            ) : (
+                <>
+                    <Ionicons name="checkmark-circle" size={22} color={COLORS.white} />
+                    <Text style={styles.btnT}>{assetId ? "Actualizar Activo" : "Guardar Activo"}</Text>
+                </>
+            )}
           </TouchableOpacity>
         </View>
-
-        <Animated.View style={[styles.toast, { opacity: fadeAnim }]}>
-          <Text style={{ color: "#fff", fontWeight: "600" }}>¡Activo guardado con éxito!</Text>
-        </Animated.View>
       </ScrollView>
 
-      <Modal visible={pick.visible} transparent animationType="slide">
+      <Animated.View 
+        pointerEvents="none" 
+        style={[styles.toast, { opacity: fadeAnim }]}
+      >
+        <Ionicons name="checkmark-done-circle" size={20} color={COLORS.white} />
+        <Text style={styles.toastText}>¡Guardado con éxito!</Text>
+      </Animated.View>
+
+      <Modal visible={pick.visible} transparent animationType="fade">
         <Pressable style={styles.mO} onPress={() => setPick({ ...pick, visible: false })}>
           <View style={styles.mC}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 }}>
-                <Text style={styles.mT}>{pick.title}</Text>
-                <TouchableOpacity onPress={() => setPick({ ...pick, visible: false })}>
-                    <Ionicons name="close" size={24} color="#333" />
-                </TouchableOpacity>
-            </View>
+            <View style={styles.mBar} />
+            <Text style={styles.mT}>{pick.title}</Text>
             <FlatList 
               data={pick.data} 
               keyExtractor={(item) => item}
+              showsVerticalScrollIndicator={false}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.mI} onPress={() => { handleChange(pick.field as any, item); setPick({ ...pick, visible: false }); }}>
-                  <Text style={{ fontSize: 16, color: "#444" }}>{item}</Text>
+                <TouchableOpacity 
+                    style={styles.mI} 
+                    onPress={() => { handleChange(pick.field as any, item); setPick({ ...pick, visible: false }); }}
+                >
+                  <Text style={styles.mIText}>{item}</Text>
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.border} />
                 </TouchableOpacity>
               )} 
             />
@@ -266,26 +206,97 @@ export default function AddAsset() {
 }
 
 const styles = StyleSheet.create({
-  header: { backgroundColor: "#1E88E5", paddingTop: 50, paddingBottom: 15, paddingHorizontal: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, elevation: 4 },
-  backBtn: { padding: 4 },
-  hT: { color: "#FFF", fontSize: 20, fontWeight: "700" },
-  cont: { padding: 18 },
-  tC: { backgroundColor: "#FFF", borderRadius: 14, padding: 14, marginBottom: 14, flexDirection: "row", justifyContent: "flex-start", alignItems: "center", elevation: 2 },
-  tN: { color: "#1E88E5", fontSize: 26, fontWeight: "700" },
-  card: { backgroundColor: "#FFF", borderRadius: 16, padding: 16, elevation: 2, marginBottom: 30 },
-  fW: { marginBottom: 12 },
-  fL: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 5 },
-  in: { backgroundColor: "#F9FBFF", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#E6EEF9", color: "#333", fontSize: 15 },
-  sel: { backgroundColor: "#F9FBFF", padding: 12, borderRadius: 10, borderWidth: 1, borderColor: "#E6EEF9", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  selT: { fontSize: 15, color: "#333" },
-  sP: { color: "#9AA6B2" }, 
-  iE: { borderColor: "#E74C3C" }, 
-  fE: { color: "#E74C3C", fontSize: 12, marginTop: 4 },
-  btn: { backgroundColor: "#1E88E5", padding: 16, borderRadius: 12, marginTop: 20, flexDirection: "row", justifyContent: "center", alignItems: "center" },
-  btnT: { color: "#fff", marginLeft: 8, fontWeight: "700", fontSize: 16 },
-  toast: { position: 'absolute', bottom: 30, left: 20, right: 20, backgroundColor: "#2E7D32", padding: 15, borderRadius: 12, alignItems: "center", elevation: 5 },
-  mO: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.4)" },
-  mC: { backgroundColor: "#fff", padding: 20, borderTopLeftRadius: 25, borderTopRightRadius: 25, maxHeight: "50%" },
-  mT: { fontSize: 18, fontWeight: "700", color: "#1E88E5" },
-  mI: { paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" }
+  header: { 
+    backgroundColor: COLORS.secondary, // Cambiado a casi negro/azul pizarra oscuro
+    paddingTop: Platform.OS === 'ios' ? 60 : 50, 
+    paddingBottom: 25, 
+    paddingHorizontal: 20, 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center",
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+  hT: { color: COLORS.white, fontSize: 18, fontWeight: "700" },
+  cont: { padding: 16 },
+  iconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center' },
+  tLabel: { color: COLORS.textSecondary, fontSize: 12, fontWeight: "600", textTransform: 'uppercase' },
+  tN: { color: COLORS.primary, fontSize: 24, fontWeight: "800" },
+  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  fL: { fontSize: 13, fontWeight: "600", color: COLORS.textSecondary, marginBottom: 6, marginLeft: 4 },
+  in: { 
+    backgroundColor: COLORS.inputBg, 
+    paddingHorizontal: 15, 
+    paddingVertical: 12, 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: COLORS.border, 
+    color: COLORS.textPrimary,
+    fontSize: 15
+  },
+  textArea: { minHeight: 80, textAlignVertical: 'top', paddingTop: 12 },
+  sel: { 
+    backgroundColor: COLORS.inputBg, 
+    paddingHorizontal: 15, 
+    paddingVertical: 14, 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: COLORS.border, 
+    flexDirection: "row", 
+    justifyContent: "space-between",
+    alignItems: 'center'
+  },
+  selT: { fontSize: 15, color: COLORS.textPrimary },
+  sP: { color: COLORS.textMuted }, 
+  iE: { borderColor: COLORS.error, backgroundColor: '#FEF2F2' }, 
+  fE: { color: COLORS.error, fontSize: 11, marginTop: 5, fontWeight: '500', marginLeft: 4 },
+  btn: { 
+    backgroundColor: COLORS.primary, // Botón con el color azul brillante de interacción
+    paddingVertical: 16, 
+    borderRadius: 12, 
+    marginTop: 15, 
+    flexDirection: "row", 
+    justifyContent: "center",
+    alignItems: 'center',
+    shadowColor: COLORS.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4
+  },
+  btnT: { color: COLORS.white, marginLeft: 10, fontWeight: "700", fontSize: 16 },
+  toast: { 
+    position: 'absolute', 
+    bottom: 40, 
+    left: 20, 
+    right: 20, 
+    backgroundColor: COLORS.success, 
+    paddingVertical: 14, 
+    borderRadius: 12, 
+    flexDirection: 'row',
+    alignItems: "center", 
+    justifyContent: 'center',
+    elevation: 10, 
+  },
+  toastText: { color: COLORS.white, fontWeight: '600', marginLeft: 8 },
+  mO: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(15, 23, 42, 0.4)" },
+  mC: { 
+    backgroundColor: COLORS.white, 
+    padding: 24, 
+    borderTopLeftRadius: 24, 
+    borderTopRightRadius: 24, 
+    maxHeight: "50%" 
+  },
+  mBar: { width: 40, height: 4, backgroundColor: COLORS.border, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  mT: { fontSize: 17, fontWeight: "700", marginBottom: 20, color: COLORS.textPrimary, textAlign: 'center' },
+  mI: { 
+    paddingVertical: 16, 
+    borderBottomWidth: 1, 
+    borderBottomColor: COLORS.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  mIText: { fontSize: 16, color: COLORS.textPrimary, fontWeight: '500' }
 });

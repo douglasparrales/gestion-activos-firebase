@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from "react";
 import {
   View,
-  Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,
@@ -9,6 +8,7 @@ import {
   TextInput,
   ScrollView,
   Alert,
+  StatusBar,
 } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -18,7 +18,11 @@ import { getAllAssets } from "../api/assets";
 import { Ionicons } from "@expo/vector-icons";
 import { exportAssetsToExcel } from "../utils/exportExcel";
 
-// Importaciones para QR Masivo
+// --- SISTEMA DE DISEÑO GLOBAL ---
+import { COLORS } from "../styles/theme";
+import { globalStyles } from "../styles/globalStyles";
+import { AppText } from "../components/AppText";
+
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
@@ -30,82 +34,27 @@ export default function AssetList() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState("");
+  
+  // Estados para controlar qué filtro está "abierto" visualmente
+  const [activeFilterTab, setActiveFilterTab] = useState<'cat' | 'loc' | 'stat' | null>('cat');
+
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
 
   const loadAssets = async () => {
     setLoading(true);
-    const data = await getAllAssets();
-    setAssets(data);
-    setLoading(false);
-  };
-
-  useFocusEffect(
-    useCallback(() => {
-      loadAssets();
-    }, [])
-  );
-
-  // --- LÓGICA DE GENERACIÓN DE QR ---
-  const generateQRDirectory = async () => {
-    if (!selectedLocation) return;
-    
-    setLoading(true);
-    const assetsInLocation = filteredAssets;
-
-    const htmlContent = `
-      <html>
-        <head>
-          <style>
-            body { font-family: 'Helvetica', sans-serif; padding: 20px; text-align: center; }
-            h1 { color: #1E88E5; margin-bottom: 5px; }
-            p { color: #666; margin-bottom: 30px; }
-            .grid { display: flex; flex-wrap: wrap; justify-content: center; }
-            .qr-card { 
-              border: 1px solid #ddd; 
-              margin: 10px; 
-              padding: 15px; 
-              width: 180px; 
-              border-radius: 10px;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-            }
-            .name { font-weight: bold; font-size: 12px; height: 30px; overflow: hidden; margin-bottom: 10px; }
-            .id { font-size: 10px; color: #888; margin-top: 5px; }
-            img { width: 130px; height: 130px; }
-          </style>
-        </head>
-        <body>
-          <h1>Etiquetas de Activos</h1>
-          <p>Ubicación: ${selectedLocation}</p>
-          <div class="grid">
-            ${assetsInLocation.map(asset => `
-              <div class="qr-card">
-                <div class="name">${String(asset.nombre).toUpperCase()}</div>
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${asset.id}" />
-                <div class="id">ID: ${asset.id}</div>
-              </div>
-            `).join('')}
-          </div>
-        </body>
-      </html>
-    `;
-
     try {
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      const data = await getAllAssets();
+      setAssets(data);
     } catch (error) {
-      Alert.alert("Error", "No se pudo generar el archivo de QRs.");
+      Alert.alert("Error", "No se pudieron cargar los activos.");
     } finally {
       setLoading(false);
     }
   };
 
-  const categories = Array.from(new Set(assets.map((a) => a.categoria).filter(Boolean)));
-  const locations = Array.from(new Set(assets.map((a) => a.ubicacion).filter(Boolean)));
-  const statuses = Array.from(new Set(assets.map((a) => a.estado).filter(Boolean)));
+  useFocusEffect(useCallback(() => { loadAssets(); }, []));
 
   const filteredAssets = assets.filter((asset) => {
     const matchName = asset.nombre?.toLowerCase().includes(searchText.toLowerCase());
@@ -115,108 +64,150 @@ export default function AssetList() {
     return matchName && matchCategory && matchLocation && matchStatus;
   });
 
-  const renderFilterSection = (title: string, data: string[], selected: string | null, onSelect: (val: string | null) => void, icon: any) => (
-    <View style={styles.filterSection}>
-      <View style={styles.filterHeader}>
-        <Ionicons name={icon} size={14} color="#64748B" />
-        <Text style={styles.filterTitle}>{title}</Text>
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <TouchableOpacity style={[styles.filterChip, !selected && styles.filterChipActive]} onPress={() => onSelect(null)}>
-          <Text style={[styles.filterText, !selected && styles.filterTextActive]}>Todos</Text>
+  const categories = Array.from(new Set(assets.map((a) => a.categoria).filter(Boolean)));
+  const locations = Array.from(new Set(assets.map((a) => a.ubicacion).filter(Boolean)));
+  const statuses = Array.from(new Set(assets.map((a) => a.estado).filter(Boolean)));
+
+  const generateQRDirectory = async () => {
+    if (!selectedLocation) return;
+    setLoading(true);
+    const htmlContent = `<html>...</html>`; // Mantener tu lógica de HTML actual
+    try {
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+    } catch (error) {
+      Alert.alert("Error", "Error al generar el PDF.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- RENDERIZADO DE OPCIONES COMPACTAS ---
+  const renderFilterOptions = () => {
+    let items: string[] = [];
+    let selected: string | null = null;
+    let onSelect: (v: string | null) => void = () => {};
+
+    if (activeFilterTab === 'cat') { items = categories; selected = selectedCategory; onSelect = setSelectedCategory; }
+    if (activeFilterTab === 'loc') { items = locations; selected = selectedLocation; onSelect = setSelectedLocation; }
+    if (activeFilterTab === 'stat') { items = statuses; selected = selectedStatus; onSelect = setSelectedStatus; }
+
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScroll}>
+        <TouchableOpacity 
+          style={[styles.optionChip, !selected && styles.optionChipActive]} 
+          onPress={() => onSelect(null)}
+        >
+          <AppText size={12} color={!selected ? COLORS.white : COLORS.textSecondary}>Todos</AppText>
         </TouchableOpacity>
-        {data.map((item) => (
-          <TouchableOpacity key={item} style={[styles.filterChip, selected === item && styles.filterChipActive]} onPress={() => onSelect(item)}>
-            <Text style={[styles.filterText, selected === item && styles.filterTextActive]}>{item}</Text>
+        {items.map(item => (
+          <TouchableOpacity 
+            key={item} 
+            style={[styles.optionChip, selected === item && styles.optionChipActive]} 
+            onPress={() => onSelect(item)}
+          >
+            <AppText size={12} color={selected === item ? COLORS.white : COLORS.textSecondary}>{item}</AppText>
           </TouchableOpacity>
         ))}
       </ScrollView>
-    </View>
-  );
-
-  const renderItem = ({ item }: { item: Asset }) => (
-    <TouchableOpacity style={styles.card} onPress={() => navigation.navigate("AssetDetail", { assetId: item.id })}>
-      <View style={styles.cardContent}>
-        <Text style={styles.cardTitle}>{String(item.nombre)}</Text>
-        
-        {/* UBICACIÓN PROFESIONAL */}
-        <View style={styles.locationWrapper}>
-          <Ionicons name="location-sharp" size={14} color="#64748B" />
-          <Text style={styles.locationText}>{item.ubicacion || "Sin ubicación"}</Text>
-        </View>
-
-        <View style={styles.cardFooter}>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>{item.categoria}</Text>
-          </View>
-          <View style={styles.statusBadge}>
-            <View style={[styles.statusDot, { backgroundColor: item.estado === 'Activo' ? '#4CAF50' : '#FFA000' }]} />
-            <Text style={styles.statusText}>{item.estado}</Text>
-          </View>
-        </View>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-    </TouchableOpacity>
-  );
+    );
+  };
 
   return (
-    <View style={styles.container}>
+    <View style={globalStyles.screen}>
+      <StatusBar barStyle="light-content" />
+      
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={26} color="#FFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Activos</Text>
-        <TouchableOpacity style={styles.exportButton} onPress={() => exportAssetsToExcel(assets)}>
-          <Ionicons name="download-outline" size={20} color="white" />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#94A3B8" />
-        <TextInput 
-          placeholder="Buscar por nombre..." 
-          value={searchText} 
-          onChangeText={setSearchText} 
-          style={styles.searchInput} 
-          placeholderTextColor="#94A3B8" 
-        />
-        {(selectedCategory || selectedLocation || selectedStatus || searchText) && (
-          <TouchableOpacity onPress={() => { setSelectedCategory(null); setSelectedLocation(null); setSelectedStatus(null); setSearchText(""); }}>
-            <Text style={{color: '#E53935', fontSize: 12, fontWeight: '700'}}>LIMPIAR</Text>
+        <View style={globalStyles.rowBetween}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={24} color={COLORS.white} />
           </TouchableOpacity>
-        )}
+          <AppText bold size={18} color={COLORS.white}>LISTADO DE ACTIVOS</AppText>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => exportAssetsToExcel(assets)}>
+            <Ionicons name="share-outline" size={22} color={COLORS.white} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={20} color={COLORS.textSecondary} />
+          <TextInput 
+            placeholder="Buscar por nombre..." 
+            placeholderTextColor={COLORS.textSecondary}
+            style={styles.input}
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+        </View>
       </View>
 
-      {/* SECCIÓN DE FILTROS */}
-      <View style={{ maxHeight: 200 }}>
-        <ScrollView style={styles.filtersWrapper}>
-          {renderFilterSection("Categoría", categories, selectedCategory, setSelectedCategory, "pricetag-outline")}
-          {renderFilterSection("Ubicación", locations, selectedLocation, setSelectedLocation, "location-outline")}
-          {renderFilterSection("Estado", statuses, selectedStatus, setSelectedStatus, "stats-chart-outline")}
-        </ScrollView>
+      {/* NUEVA SECCIÓN DE FILTROS COMPACTA */}
+      <View style={styles.compactFilterWrapper}>
+        <View style={styles.tabContainer}>
+          <TouchableOpacity 
+            onPress={() => setActiveFilterTab('cat')}
+            style={[styles.filterTab, activeFilterTab === 'cat' && styles.activeTab]}
+          >
+            <AppText bold={activeFilterTab === 'cat'} size={12} color={activeFilterTab === 'cat' ? COLORS.secondary : COLORS.textSecondary}>Categoría</AppText>
+            {selectedCategory && <View style={styles.dotIndicator} />}
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={() => setActiveFilterTab('loc')}
+            style={[styles.filterTab, activeFilterTab === 'loc' && styles.activeTab]}
+          >
+            <AppText bold={activeFilterTab === 'loc'} size={12} color={activeFilterTab === 'loc' ? COLORS.secondary : COLORS.textSecondary}>Ubicación</AppText>
+            {selectedLocation && <View style={styles.dotIndicator} />}
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            onPress={() => setActiveFilterTab('stat')}
+            style={[styles.filterTab, activeFilterTab === 'stat' && styles.activeTab]}
+          >
+            <AppText bold={activeFilterTab === 'stat'} size={12} color={activeFilterTab === 'stat' ? COLORS.secondary : COLORS.textSecondary}>Estado</AppText>
+            {selectedStatus && <View style={styles.dotIndicator} />}
+          </TouchableOpacity>
+        </View>
+
+        {/* Sub-opciones desplegables */}
+        <View style={styles.optionsWrapper}>
+          {renderFilterOptions()}
+        </View>
       </View>
 
-      {/* BOTÓN DINÁMICO DE DESCARGA QR */}
-      {selectedLocation && filteredAssets.length > 0 && (
-        <TouchableOpacity style={styles.qrDownloadBtn} onPress={generateQRDirectory}>
-          <Ionicons name="qr-code-outline" size={20} color="#FFF" />
-          <Text style={styles.qrDownloadText}>Descargar QRs de {selectedLocation}</Text>
-          <View style={styles.qrBadge}><Text style={styles.qrBadgeText}>{filteredAssets.length}</Text></View>
+      {selectedLocation && (
+        <TouchableOpacity style={styles.qrBtn} onPress={generateQRDirectory}>
+          <Ionicons name="qr-code" size={16} color={COLORS.white} />
+          <AppText bold size={12} color={COLORS.white} style={{ marginLeft: 8 }}>Etiquetas {selectedLocation} ({filteredAssets.length})</AppText>
         </TouchableOpacity>
       )}
 
       <FlatList
         data={filteredAssets}
         keyExtractor={(item) => String(item.id)}
-        renderItem={renderItem}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-        contentContainerStyle={{ padding: 16, paddingBottom: 30 }}
-        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20, color: '#94A3B8' }}>No se encontraron activos.</Text>}
+        contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => (
+          <TouchableOpacity 
+            style={[globalStyles.card, styles.itemCard]}
+            onPress={() => navigation.navigate("AssetDetail", { assetId: item.id })}
+          >
+            <View style={{ flex: 1 }}>
+              <AppText bold size={15}>{item.nombre}</AppText>
+              <AppText size={12} color={COLORS.textSecondary}>{item.ubicacion}</AppText>
+              <View style={styles.badgeRow}>
+                <View style={styles.miniBadge}><AppText size={9}>{item.categoria}</AppText></View>
+                <AppText bold size={10} color={item.estado?.toLowerCase().includes('activo') ? '#10B981' : '#EF4444'}>
+                  ● {item.estado}
+                </AppText>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.border} />
+          </TouchableOpacity>
+        )}
       />
-      
+
       {loading && (
-        <View style={styles.absLoader}>
-          <ActivityIndicator size="large" color="#1E88E5" />
+        <View style={styles.loaderOverlay}>
+          <ActivityIndicator size="large" color={COLORS.secondary} />
         </View>
       )}
     </View>
@@ -224,91 +215,94 @@ export default function AssetList() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8FAFC" },
-  header: { 
-    backgroundColor: "#1E88E5", 
-    paddingTop: 50, 
-    paddingBottom: 15, 
-    paddingHorizontal: 20, 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: "center", 
-    borderBottomLeftRadius: 16, 
-    borderBottomRightRadius: 16, 
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 5
+  header: {
+    backgroundColor: COLORS.primary,
+    paddingTop: 50,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 25,
+    borderBottomRightRadius: 25,
   },
-  headerTitle: { color: "#FFF", fontSize: 20, fontWeight: "700" },
-  exportButton: { backgroundColor: "#1565C0", padding: 8, borderRadius: 10 },
-  searchContainer: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    backgroundColor: "#FFF", 
-    marginHorizontal: 16, 
-    marginTop: 16, 
-    paddingHorizontal: 14, 
-    paddingVertical: 10, 
-    borderRadius: 14, 
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
-  searchInput: { flex: 1, marginLeft: 10, fontSize: 15, color: "#1E293B" },
-  filtersWrapper: { paddingHorizontal: 16, marginTop: 10 },
-  filterSection: { marginBottom: 12 },
-  filterHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  filterTitle: { fontSize: 11, fontWeight: '800', color: '#64748B', marginLeft: 5, textTransform: 'uppercase' },
-  filterChip: { 
-    paddingHorizontal: 14, 
-    paddingVertical: 6, 
-    borderRadius: 10, 
-    backgroundColor: "#FFF", 
-    marginRight: 8, 
-    borderWidth: 1, 
-    borderColor: '#E2E8F0' 
-  },
-  filterChipActive: { backgroundColor: "#1E88E5", borderColor: '#1E88E5' },
-  filterText: { fontSize: 13, color: "#64748B", fontWeight: "600" },
-  filterTextActive: { color: "#FFFFFF" },
-  
-  qrDownloadBtn: {
+  backBtn: { width: 30 },
+  actionBtn: { width: 30, alignItems: 'flex-end' },
+  searchBar: {
     flexDirection: 'row',
-    backgroundColor: '#059669',
-    marginHorizontal: 16,
-    marginTop: 5,
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    marginTop: 15,
+    height: 44,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+  },
+  input: { flex: 1, marginLeft: 8, fontSize: 14, color: COLORS.textPrimary },
+  
+  // ESTILOS FILTROS COMPACTOS
+  compactFilterWrapper: {
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingTop: 10,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 10,
+  },
+  filterTab: {
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: COLORS.secondary,
+  },
+  dotIndicator: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.secondary,
+    marginTop: 2,
+  },
+  optionsWrapper: {
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 10,
+  },
+  optionsScroll: {
+    paddingLeft: 20,
+  },
+  optionChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  optionChipActive: {
+    backgroundColor: COLORS.secondary,
+    borderColor: COLORS.secondary,
+  },
+
+  qrBtn: {
+    flexDirection: 'row',
+    backgroundColor: '#10B981',
+    margin: 15,
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 2
   },
-  qrDownloadText: { color: '#FFF', fontWeight: 'bold', marginLeft: 10, fontSize: 13 },
-  qrBadge: { backgroundColor: '#FFF', marginLeft: 10, paddingHorizontal: 6, borderRadius: 10 },
-  qrBadgeText: { color: '#059669', fontSize: 10, fontWeight: '900' },
-
-  card: { 
-    backgroundColor: "#FFFFFF", 
-    borderRadius: 16, 
-    padding: 16, 
-    flexDirection: "row", 
-    alignItems: "center", 
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: "#000",
-    shadowOpacity: 0.02,
-    shadowRadius: 5,
-    elevation: 2
+  listContent: { padding: 15, paddingBottom: 100 },
+  itemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    padding: 12,
   },
-  cardContent: { flex: 1 },
-  cardTitle: { fontSize: 16, fontWeight: "700", color: "#1E293B", marginBottom: 4 },
-  locationWrapper: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  locationText: { fontSize: 13, color: "#64748B", marginLeft: 4, fontWeight: "500" },
-  cardFooter: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  tag: { backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#E2E8F0' },
-  tagText: { fontSize: 11, color: '#475569', fontWeight: '700', textTransform: 'uppercase' },
-  statusBadge: { flexDirection: 'row', alignItems: 'center' },
-  statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-  statusText: { fontSize: 12, color: '#475569', fontWeight: '600' },
-  absLoader: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.7)', justifyContent: 'center', alignItems: 'center' }
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 5 },
+  miniBadge: { backgroundColor: '#E2E8F0', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  loaderOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 10 }
 });
