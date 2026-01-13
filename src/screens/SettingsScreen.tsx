@@ -1,11 +1,14 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from "react-native";
 import { useUser } from "../context/UserContext";
 import { useNavigation } from "@react-navigation/native";
 import { signOut, createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../services/firebaseConfig";
 import { doc, setDoc } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
+
+// 1. Importación del componente personalizado
+import GlobalTextInput from "../components/GlobalTextInput";
 
 export default function SettingsScreen() {
     const { user, setUser } = useUser();
@@ -73,31 +76,55 @@ export default function SettingsScreen() {
                     {/* Gestión de Catálogos */}
                     <View style={styles.card}>
                         <Text style={styles.sectionTitleSmall}>Catálogos y Listas</Text>
-                        <View style={styles.buttonGrid}>
-                            <TouchableOpacity 
-                                style={[styles.actionButton, { backgroundColor: "#E8F5E9" }]} 
-                                onPress={() => navigation.navigate("CategoryManager" as never)}
-                            >
-                                <Ionicons name="pricetags" size={24} color="#2E7D32" />
-                                <Text style={[styles.actionButtonText, { color: "#2E7D32" }]}>Categorías</Text>
-                            </TouchableOpacity>
+                        <View style={{ marginBottom: 15 }}>
+                           <View style={styles.buttonGrid}>
+                                <TouchableOpacity 
+                                    style={[styles.actionButton, { backgroundColor: "#E8F5E9" }]} 
+                                    onPress={() => navigation.navigate("CategoryManager" as never)}
+                                >
+                                    <Ionicons name="pricetags" size={24} color="#2E7D32" />
+                                    <Text style={[styles.actionButtonText, { color: "#2E7D32" }]}>Categorías</Text>
+                                </TouchableOpacity>
 
-                            <TouchableOpacity 
-                                style={[styles.actionButton, { backgroundColor: "#E0F2F1" }]} 
-                                onPress={() => navigation.navigate("LocationManager" as never)}
-                            >
-                                <Ionicons name="business" size={24} color="#00695C" />
-                                <Text style={[styles.actionButtonText, { color: "#00695C" }]}>Ubicaciones</Text>
-                            </TouchableOpacity>
+                                <TouchableOpacity 
+                                    style={[styles.actionButton, { backgroundColor: "#E0F2F1" }]} 
+                                    onPress={() => navigation.navigate("LocationManager" as never)}
+                                >
+                                    <Ionicons name="business" size={24} color="#00695C" />
+                                    <Text style={[styles.actionButtonText, { color: "#00695C" }]}>Ubicaciones</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     </View>
 
                     {/* Registro de Usuarios */}
                     <View style={styles.card}>
                         <Text style={styles.sectionTitleSmall}>Registrar Nuevo Usuario</Text>
-                        <TextInput placeholder="Nombre completo" value={name} onChangeText={setName} style={styles.input} />
-                        <TextInput placeholder="Correo electrónico" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" style={styles.input} />
-                        <TextInput placeholder="Contraseña" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+                        
+                        {/* 2. Sustitución por GlobalTextInput */}
+                        <GlobalTextInput 
+                            label="Nombre completo"
+                            placeholder="Nombre completo"
+                            value={name}
+                            onChangeText={setName}
+                        />
+
+                        <GlobalTextInput 
+                            label="Correo electrónico"
+                            placeholder="Correo electrónico"
+                            value={email}
+                            onChangeText={setEmail}
+                            autoCapitalize="none"
+                            keyboardType="email-address"
+                        />
+
+                        <GlobalTextInput 
+                            label="Contraseña"
+                            placeholder="Contraseña"
+                            value={password}
+                            onChangeText={setPassword}
+                            secureTextEntry
+                        />
                         
                         <TouchableOpacity 
                             style={[styles.primaryButton, loading && { opacity: 0.7 }]} 
@@ -149,8 +176,7 @@ const styles = StyleSheet.create({
     actionButton: { flex: 1, paddingVertical: 15, borderRadius: 15, alignItems: 'center', justifyContent: 'center', gap: 5 },
     actionButtonText: { fontSize: 13, fontWeight: "700" },
 
-    input: { backgroundColor: "#F1F5F9", borderRadius: 12, padding: 14, fontSize: 15, marginBottom: 12, color: "#1E293B" },
-    primaryButton: { backgroundColor: "#1E88E5", paddingVertical: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+    primaryButton: { backgroundColor: "#1E88E5", paddingVertical: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10 },
     primaryButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 16 },
 
     logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 12, borderWidth: 1, borderColor: "#FEE2E2", gap: 10, backgroundColor: "#FFF" },

@@ -118,7 +118,7 @@ export default function AssetList() {
   const renderFilterSection = (title: string, data: string[], selected: string | null, onSelect: (val: string | null) => void, icon: any) => (
     <View style={styles.filterSection}>
       <View style={styles.filterHeader}>
-        <Ionicons name={icon} size={16} color="#666" />
+        <Ionicons name={icon} size={14} color="#64748B" />
         <Text style={styles.filterTitle}>{title}</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -138,20 +138,33 @@ export default function AssetList() {
     <TouchableOpacity style={styles.card} onPress={() => navigation.navigate("AssetDetail", { assetId: item.id })}>
       <View style={styles.cardContent}>
         <Text style={styles.cardTitle}>{String(item.nombre)}</Text>
-        <Text style={styles.cardSubtitle}>📍 {item.ubicacion || "Sin ubicación"}</Text>
+        
+        {/* UBICACIÓN PROFESIONAL */}
+        <View style={styles.locationWrapper}>
+          <Ionicons name="location-sharp" size={14} color="#64748B" />
+          <Text style={styles.locationText}>{item.ubicacion || "Sin ubicación"}</Text>
+        </View>
+
         <View style={styles.cardFooter}>
-          <View style={styles.tag}><Text style={styles.tagText}>{item.categoria}</Text></View>
-          <Text style={styles.statusText}>• {item.estado}</Text>
+          <View style={styles.tag}>
+            <Text style={styles.tagText}>{item.categoria}</Text>
+          </View>
+          <View style={styles.statusBadge}>
+            <View style={[styles.statusDot, { backgroundColor: item.estado === 'Activo' ? '#4CAF50' : '#FFA000' }]} />
+            <Text style={styles.statusText}>{item.estado}</Text>
+          </View>
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={22} color="#A0A0A0" />
+      <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
     </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}><Ionicons name="arrow-back" size={26} color="#FFF" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={26} color="#FFF" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Activos</Text>
         <TouchableOpacity style={styles.exportButton} onPress={() => exportAssetsToExcel(assets)}>
           <Ionicons name="download-outline" size={20} color="white" />
@@ -159,8 +172,14 @@ export default function AssetList() {
       </View>
 
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#777" />
-        <TextInput placeholder="Buscar por nombre..." value={searchText} onChangeText={setSearchText} style={styles.searchInput} placeholderTextColor="#999" />
+        <Ionicons name="search" size={20} color="#94A3B8" />
+        <TextInput 
+          placeholder="Buscar por nombre..." 
+          value={searchText} 
+          onChangeText={setSearchText} 
+          style={styles.searchInput} 
+          placeholderTextColor="#94A3B8" 
+        />
         {(selectedCategory || selectedLocation || selectedStatus || searchText) && (
           <TouchableOpacity onPress={() => { setSelectedCategory(null); setSelectedLocation(null); setSelectedStatus(null); setSearchText(""); }}>
             <Text style={{color: '#E53935', fontSize: 12, fontWeight: '700'}}>LIMPIAR</Text>
@@ -168,7 +187,7 @@ export default function AssetList() {
         )}
       </View>
 
-      {/* 🏷️ SECCIÓN DE FILTROS */}
+      {/* SECCIÓN DE FILTROS */}
       <View style={{ maxHeight: 200 }}>
         <ScrollView style={styles.filtersWrapper}>
           {renderFilterSection("Categoría", categories, selectedCategory, setSelectedCategory, "pricetag-outline")}
@@ -177,7 +196,7 @@ export default function AssetList() {
         </ScrollView>
       </View>
 
-      {/* 🚀 BOTÓN DINÁMICO DE DESCARGA QR */}
+      {/* BOTÓN DINÁMICO DE DESCARGA QR */}
       {selectedLocation && filteredAssets.length > 0 && (
         <TouchableOpacity style={styles.qrDownloadBtn} onPress={generateQRDirectory}>
           <Ionicons name="qr-code-outline" size={20} color="#FFF" />
@@ -192,7 +211,7 @@ export default function AssetList() {
         renderItem={renderItem}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         contentContainerStyle={{ padding: 16, paddingBottom: 30 }}
-        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20, color: '#999' }}>No se encontraron activos.</Text>}
+        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20, color: '#94A3B8' }}>No se encontraron activos.</Text>}
       />
       
       {loading && (
@@ -205,44 +224,91 @@ export default function AssetList() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F7FA" },
-  header: { backgroundColor: "#1E88E5", paddingTop: 50, paddingBottom: 15, paddingHorizontal: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomLeftRadius: 16, borderBottomRightRadius: 16, elevation: 4 },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  header: { 
+    backgroundColor: "#1E88E5", 
+    paddingTop: 50, 
+    paddingBottom: 15, 
+    paddingHorizontal: 20, 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    borderBottomLeftRadius: 16, 
+    borderBottomRightRadius: 16, 
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 5
+  },
   headerTitle: { color: "#FFF", fontSize: 20, fontWeight: "700" },
   exportButton: { backgroundColor: "#1565C0", padding: 8, borderRadius: 10 },
-  searchContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFF", marginHorizontal: 16, marginTop: 16, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, elevation: 2 },
-  searchInput: { flex: 1, marginLeft: 10, fontSize: 15, color: "#333" },
+  searchContainer: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    backgroundColor: "#FFF", 
+    marginHorizontal: 16, 
+    marginTop: 16, 
+    paddingHorizontal: 14, 
+    paddingVertical: 10, 
+    borderRadius: 14, 
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  searchInput: { flex: 1, marginLeft: 10, fontSize: 15, color: "#1E293B" },
   filtersWrapper: { paddingHorizontal: 16, marginTop: 10 },
   filterSection: { marginBottom: 12 },
   filterHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  filterTitle: { fontSize: 12, fontWeight: '700', color: '#666', marginLeft: 5, textTransform: 'uppercase' },
-  filterChip: { paddingHorizontal: 15, paddingVertical: 6, borderRadius: 20, backgroundColor: "#FFF", marginRight: 8, borderWidth: 1, borderColor: '#E3F2FD' },
+  filterTitle: { fontSize: 11, fontWeight: '800', color: '#64748B', marginLeft: 5, textTransform: 'uppercase' },
+  filterChip: { 
+    paddingHorizontal: 14, 
+    paddingVertical: 6, 
+    borderRadius: 10, 
+    backgroundColor: "#FFF", 
+    marginRight: 8, 
+    borderWidth: 1, 
+    borderColor: '#E2E8F0' 
+  },
   filterChipActive: { backgroundColor: "#1E88E5", borderColor: '#1E88E5' },
-  filterText: { fontSize: 13, color: "#1E88E5", fontWeight: "600" },
+  filterText: { fontSize: 13, color: "#64748B", fontWeight: "600" },
   filterTextActive: { color: "#FFFFFF" },
   
-  // Nuevo botón de descarga QR
   qrDownloadBtn: {
     flexDirection: 'row',
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#059669',
     marginHorizontal: 16,
     marginTop: 5,
     padding: 12,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 3
+    elevation: 2
   },
   qrDownloadText: { color: '#FFF', fontWeight: 'bold', marginLeft: 10, fontSize: 13 },
   qrBadge: { backgroundColor: '#FFF', marginLeft: 10, paddingHorizontal: 6, borderRadius: 10 },
-  qrBadgeText: { color: '#2E7D32', fontSize: 10, fontWeight: '900' },
+  qrBadgeText: { color: '#059669', fontSize: 10, fontWeight: '900' },
 
-  card: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 15, flexDirection: "row", alignItems: "center", elevation: 2 },
+  card: { 
+    backgroundColor: "#FFFFFF", 
+    borderRadius: 16, 
+    padding: 16, 
+    flexDirection: "row", 
+    alignItems: "center", 
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: "#000",
+    shadowOpacity: 0.02,
+    shadowRadius: 5,
+    elevation: 2
+  },
   cardContent: { flex: 1 },
-  cardTitle: { fontSize: 16, fontWeight: "700", color: "#1A1A1A" },
-  cardSubtitle: { fontSize: 13, color: "#666", marginTop: 2 },
-  cardFooter: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  tag: { backgroundColor: '#E3F2FD', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  tagText: { fontSize: 11, color: '#1E88E5', fontWeight: '700' },
-  statusText: { fontSize: 12, color: '#4CAF50', marginLeft: 8, fontWeight: '600' },
+  cardTitle: { fontSize: 16, fontWeight: "700", color: "#1E293B", marginBottom: 4 },
+  locationWrapper: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  locationText: { fontSize: 13, color: "#64748B", marginLeft: 4, fontWeight: "500" },
+  cardFooter: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  tag: { backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#E2E8F0' },
+  tagText: { fontSize: 11, color: '#475569', fontWeight: '700', textTransform: 'uppercase' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center' },
+  statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  statusText: { fontSize: 12, color: '#475569', fontWeight: '600' },
   absLoader: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.7)', justifyContent: 'center', alignItems: 'center' }
 });

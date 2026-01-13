@@ -12,9 +12,17 @@ import { Asset } from "../types/Asset";
 const STATES = ["Activo", "En mantenimiento", "Baja"];
 
 const initialState: Asset = {
-  id: 0, nombre: "", categoria: "", estado: "", ubicacion: "", descripcion: "", observacion: "",
-  fechaAdquisicion: new Date().toISOString().split("T")[0], fechaRegistro: new Date().toISOString(),
-  costoInicial: undefined, depreciacionAnual: undefined, 
+  id: 0, 
+  nombre: "", 
+  categoria: "", 
+  estado: "", 
+  ubicacion: "", 
+  descripcion: "", 
+  observacion: "",
+  fechaAdquisicion: new Date().toISOString().split("T")[0], 
+  fechaRegistro: new Date().toISOString(),
+  costoInicial: undefined, 
+  depreciacionAnual: undefined, 
   cantidad: 1,
 };
 
@@ -36,7 +44,9 @@ const InputField = ({ label, value, error, onPress, children, disabled }: any) =
 );
 
 export default function AddAsset() {
-  const route = useRoute<any>(), navigation = useNavigation<any>(), { assetId } = route.params || {};
+  const route = useRoute<any>();
+  const navigation = useNavigation<any>();
+  const { assetId } = route.params || {};
   const { user } = useUser();
   
   const [asset, setAsset] = useState<Asset>(initialState);
@@ -50,16 +60,48 @@ export default function AddAsset() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const isEditing = Boolean(assetId);
-  // Solo admin puede editar fechas o porcentajes de depreciación en edición. 
-  // En creación (isEditing = false), cualquiera puede.
   const canEditAdminFields = user?.role === "admin" || !isEditing;
+
+  // EFECTO 1: Carga de catálogos iniciales
+  useEffect(() => {
+    getCategories().then(data => setCategories(data.map((c: any) => c.name)));
+    getLocations().then(data => setLocations(data.map((l: any) => l.name)));
+    getAllAssets().then(all => setTotalAssets(all.length));
+  }, []);
+
+  // EFECTO 2: Carga de datos si es edición o limpieza si no lo es
+  useEffect(() => {
+    if (assetId) { 
+      setLoading(true); 
+      getAsset(assetId)
+        .then(ex => { if(ex) setAsset({ ...ex, cantidad: ex.cantidad ?? 1 }); })
+        .finally(() => setLoading(false)); 
+    } else {
+      setAsset(initialState);
+      setErrors({});
+    }
+  }, [assetId]);
+
+  // EFECTO 3: Limpieza de parámetros al salir de la pantalla
+  useFocusEffect(
+    useCallback(() => {
+      if (!assetId) {
+        setAsset(initialState);
+        setErrors({});
+      }
+      return () => {
+        // Limpia el assetId de la ruta al salir para que la próxima vez entre limpio
+        navigation.setParams({ assetId: undefined });
+      };
+    }, [assetId, navigation])
+  );
 
   const validate = (f: keyof Asset, v: any) => {
     let m = ""; const val = String(v ?? "").trim();
     if (["nombre", "categoria", "estado", "ubicacion", "costoInicial", "cantidad"].includes(f) && !val) {
       m = "Obligatorio";
-    } else if (f === "nombre" && !/^[A-Za-zÁÉÍÓÚÑáéíóúñ ]+$/.test(val)) {
-      m = "Solo letras";
+    } else if (f === "nombre" && !/^[A-Za-zÁÉÍÓÚÑáéíóúñ0-9 ]+$/.test(val)) {
+      m = "Nombre inválido";
     } else if (f === "costoInicial" && (isNaN(Number(val)) || Number(val) <= 0)) {
       m = "Debe ser > 0";
     } else if (f === "cantidad" && (isNaN(Number(val)) || Number(val) <= 0)) {
@@ -74,34 +116,19 @@ export default function AddAsset() {
     let val = ["costoInicial", "depreciacionAnual", "cantidad"].includes(f) 
       ? String(v).replace(/[^0-9.]/g, "") 
       : v;
+    
     if (typeof v === "string" && f === "nombre") {
       val = v.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
     }
-    setAsset(p => ({ ...p, [f]: val })); validate(f, val);
-  };
-
-  useEffect(() => {
-    getCategories().then(data => setCategories(data.map((c: any) => c.name)));
-    getLocations().then(data => setLocations(data.map((l: any) => l.name)));
-    getAllAssets().then(all => setTotalAssets(all.length));
     
-    if (assetId) { 
-      setLoading(true); 
-      getAsset(assetId)
-        .then(ex => { if(ex) setAsset({ ...ex, cantidad: ex.cantidad ?? 1 }); })
-        .finally(() => setLoading(false)); 
-    }
-  }, [assetId]);
-
-  useFocusEffect(useCallback(() => { 
-    if (!assetId) { setAsset(initialState); setErrors({}); } 
-  }, [assetId]));
+    setAsset(p => ({ ...p, [f]: val })); 
+    validate(f, val);
+  };
 
   const handleSave = async () => {
     const fields: (keyof Asset)[] = ["nombre", "categoria", "estado", "ubicacion", "costoInicial", "cantidad"];
     if (!fields.every(f => validate(f, asset[f]))) return;
     
-    // Validar depreciación si se puso algo
     if (asset.depreciacionAnual && !validate("depreciacionAnual", asset.depreciacionAnual)) return;
 
     setLoading(true);
@@ -121,6 +148,7 @@ export default function AddAsset() {
         Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true })
       ]).start(() => {
         if (isEditing) {
+          navigation.setParams({ assetId: undefined });
           navigation.navigate("AssetDetail", { assetId: assetId });
         } else {
           setAsset(initialState);
@@ -129,7 +157,11 @@ export default function AddAsset() {
         }
       });
 
-    } catch (e) { console.log(e); } finally { setLoading(false); }
+    } catch (e) { 
+      console.log(e); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   return (
@@ -138,23 +170,16 @@ export default function AddAsset() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={26} color="#FFF" />
         </TouchableOpacity>
-        <Text style={styles.hT}>{assetId ? "Editar" : "Registrar"} Activo</Text>
+        <Text style={styles.hT}>{isEditing ? "Editar" : "Registrar"} Activo</Text>
         <View style={{ width: 26 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.cont} keyboardShouldPersistTaps="handled">
         <View style={styles.tC}>
           <View>
-            <Text style={{ color: "#666", fontSize: 13 }}>Total activos</Text>
+            <Text style={{ color: "#666", fontSize: 13 }}>Total activos registrados</Text>
             <Text style={styles.tN}>{totalAssets ?? "--"}</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.r} 
-            onPress={() => navigation.navigate("Tabs", { screen: "Activos" })}
-          >
-            <Ionicons name="layers-outline" size={20} color="#1565C0" />
-            <Text style={styles.at}>Ver lista</Text>
-          </TouchableOpacity>
         </View>
 
         <View style={styles.card}>
@@ -185,7 +210,6 @@ export default function AddAsset() {
             <TextInput style={[styles.in, errors.costoInicial && styles.iE]} value={String(asset.costoInicial ?? "")} keyboardType="numeric" onChangeText={v => handleChange("costoInicial", v)} placeholder="0.00" />
           </InputField>
 
-          {/* NUEVO CAMPO: DEPRECIACIÓN ANUAL */}
           <InputField label="Depreciación Anual (%)" error={errors.depreciacionAnual}>
             <TextInput 
               style={[styles.in, errors.depreciacionAnual && styles.iE, !canEditAdminFields && { opacity: 0.6, backgroundColor: "#F0F0F0" }]} 
@@ -206,26 +230,31 @@ export default function AddAsset() {
           </InputField>
 
           <TouchableOpacity style={[styles.btn, loading && { opacity: 0.7 }]} onPress={handleSave} disabled={loading}>
-            <Ionicons name="save-outline" size={20} color="#FFF" />
-            <Text style={styles.btnT}>{loading ? "Guardando..." : "Guardar"}</Text>
+            <Ionicons name={loading ? "refresh-outline" : "save-outline"} size={20} color="#FFF" />
+            <Text style={styles.btnT}>{loading ? "Guardando..." : "Guardar Activo"}</Text>
           </TouchableOpacity>
         </View>
 
         <Animated.View style={[styles.toast, { opacity: fadeAnim }]}>
-          <Text style={{ color: "#fff" }}>¡Guardado con éxito!</Text>
+          <Text style={{ color: "#fff", fontWeight: "600" }}>¡Activo guardado con éxito!</Text>
         </Animated.View>
       </ScrollView>
 
       <Modal visible={pick.visible} transparent animationType="slide">
         <Pressable style={styles.mO} onPress={() => setPick({ ...pick, visible: false })}>
           <View style={styles.mC}>
-            <Text style={styles.mT}>{pick.title}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 }}>
+                <Text style={styles.mT}>{pick.title}</Text>
+                <TouchableOpacity onPress={() => setPick({ ...pick, visible: false })}>
+                    <Ionicons name="close" size={24} color="#333" />
+                </TouchableOpacity>
+            </View>
             <FlatList 
               data={pick.data} 
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.mI} onPress={() => { handleChange(pick.field as any, item); setPick({ ...pick, visible: false }); }}>
-                  <Text>{item}</Text>
+                  <Text style={{ fontSize: 16, color: "#444" }}>{item}</Text>
                 </TouchableOpacity>
               )} 
             />
@@ -241,24 +270,22 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   hT: { color: "#FFF", fontSize: 20, fontWeight: "700" },
   cont: { padding: 18 },
-  tC: { backgroundColor: "#FFF", borderRadius: 14, padding: 14, marginBottom: 14, flexDirection: "row", justifyContent: "space-between", alignItems: "center", elevation: 2 },
+  tC: { backgroundColor: "#FFF", borderRadius: 14, padding: 14, marginBottom: 14, flexDirection: "row", justifyContent: "flex-start", alignItems: "center", elevation: 2 },
   tN: { color: "#1E88E5", fontSize: 26, fontWeight: "700" },
-  r: { flexDirection: "row", alignItems: "center" },
-  at: { color: "#1565C0", marginLeft: 8, fontWeight: "600" },
-  card: { backgroundColor: "#FFF", borderRadius: 16, padding: 16, elevation: 2 },
+  card: { backgroundColor: "#FFF", borderRadius: 16, padding: 16, elevation: 2, marginBottom: 30 },
   fW: { marginBottom: 12 },
   fL: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 5 },
-  in: { backgroundColor: "#F9FBFF", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#E6EEF9", color: "#333" },
-  sel: { backgroundColor: "#F9FBFF", padding: 12, borderRadius: 10, borderWidth: 1, borderColor: "#E6EEF9", flexDirection: "row", justifyContent: "space-between" },
+  in: { backgroundColor: "#F9FBFF", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#E6EEF9", color: "#333", fontSize: 15 },
+  sel: { backgroundColor: "#F9FBFF", padding: 12, borderRadius: 10, borderWidth: 1, borderColor: "#E6EEF9", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   selT: { fontSize: 15, color: "#333" },
   sP: { color: "#9AA6B2" }, 
   iE: { borderColor: "#E74C3C" }, 
   fE: { color: "#E74C3C", fontSize: 12, marginTop: 4 },
-  btn: { backgroundColor: "#1E88E5", padding: 14, borderRadius: 12, marginTop: 10, flexDirection: "row", justifyContent: "center" },
-  btnT: { color: "#fff", marginLeft: 8, fontWeight: "700" },
-  toast: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: "#2E7D32", padding: 12, borderRadius: 10, alignItems: "center", elevation: 5 },
+  btn: { backgroundColor: "#1E88E5", padding: 16, borderRadius: 12, marginTop: 20, flexDirection: "row", justifyContent: "center", alignItems: "center" },
+  btnT: { color: "#fff", marginLeft: 8, fontWeight: "700", fontSize: 16 },
+  toast: { position: 'absolute', bottom: 30, left: 20, right: 20, backgroundColor: "#2E7D32", padding: 15, borderRadius: 12, alignItems: "center", elevation: 5 },
   mO: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.4)" },
-  mC: { backgroundColor: "#fff", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "40%" },
-  mT: { fontSize: 18, fontWeight: "700", marginBottom: 10 },
-  mI: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: "#EEE" }
+  mC: { backgroundColor: "#fff", padding: 20, borderTopLeftRadius: 25, borderTopRightRadius: 25, maxHeight: "50%" },
+  mT: { fontSize: 18, fontWeight: "700", color: "#1E88E5" },
+  mI: { paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" }
 });

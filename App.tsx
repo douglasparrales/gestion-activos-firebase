@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { TextInput, View, Text, ActivityIndicator } from "react-native"; 
 import "react-native-gesture-handler";
 
 import { NavigationContainer } from "@react-navigation/native";
@@ -23,7 +24,6 @@ import CreateUserScreen from "./src/screens/CreateUserScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import CategoryManager from "./src/screens/CategoryManager";
 import LocationManager from "./src/screens/LocationManager";
-
 
 // ---------------- NAVIGATORS ----------------
 const Tabs = createBottomTabNavigator();
@@ -91,6 +91,7 @@ function TabsWrapper() {
         }}
       />
 
+      {/* --- CAMBIO APLICADO AQUÍ: Listener para limpiar parámetros --- */}
       <Tabs.Screen
         name="Agregar"
         component={AddAsset}
@@ -99,6 +100,12 @@ function TabsWrapper() {
             <Ionicons name="add-circle-outline" size={28} color={color} />
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            // Al presionar el tab, reseteamos manualmente los parámetros para evitar modo edición persistente
+            navigation.setParams({ assetId: undefined });
+          },
+        })}
       />
 
       <Tabs.Screen
@@ -119,7 +126,17 @@ function TabsWrapper() {
    STACK PRINCIPAL
 ---------------------------------------------------------------------- */
 function MainNavigator() {
-  const { user } = useUser();
+  const { user, loadingUser } = useUser();
+
+  // Pantalla de carga mientras se verifica la sesión
+  if (loadingUser) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F5F7FA" }}>
+        <ActivityIndicator size="large" color="#1E88E5" />
+        <Text style={{ marginTop: 10, color: "#666", fontWeight: "600" }}>Cargando...</Text>
+      </View>
+    );
+  }
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -128,21 +145,10 @@ function MainNavigator() {
       ) : (
         <>
           <Stack.Screen name="Tabs" component={TabsWrapper} />
-
-          {/* SOLO ADMIN LLEGA AQUÍ DESDE SETTINGS */}
-          <Stack.Screen
-            name="CategoryManager"
-            component={CategoryManager}
-          />
+          <Stack.Screen name="CategoryManager" component={CategoryManager} />
           <Stack.Screen name="LocationManager" component={LocationManager} />
-
-
-          <Stack.Screen
-            name="CrearUsuario"
-            component={CreateUserScreen}
-          />
+          <Stack.Screen name="CrearUsuario" component={CreateUserScreen} />
         </>
-
       )}
     </Stack.Navigator>
   );
