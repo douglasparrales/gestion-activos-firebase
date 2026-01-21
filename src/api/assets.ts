@@ -10,10 +10,35 @@ import {
   orderBy,
   limit,
   updateDoc,
+  onSnapshot, // ⬅️ Nuevo import necesario
 } from "firebase/firestore";
 import { Asset } from "../types/Asset";
 
 const activosRef = collection(db, "activos");
+
+/* =========================================================
+    🔹 NUEVO: Suscripción en tiempo real (Listener)
+========================================================= */
+export function subscribeToAssets(callback: (assets: Asset[]) => void) {
+  try {
+    // Escuchamos la colección "activos"
+    return onSnapshot(activosRef, (snapshot) => {
+      const assets = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data() as Asset;
+        return {
+          ...d,
+          id: Number(d.id), // Mantenemos tu lógica de ID numérico
+        };
+      });
+      callback(assets);
+    }, (error) => {
+      console.error("❌ Error en suscripción en tiempo real:", error);
+    });
+  } catch (e) {
+    console.error("❌ Error configurando onSnapshot:", e);
+    throw e;
+  }
+}
 
 /* =========================================================
     🔹 Generar ID incremental numérico
@@ -26,7 +51,6 @@ export async function generateNextAssetId(): Promise<number> {
     if (snap.empty) return 1;
 
     const last = snap.docs[0].data() as Asset;
-
     const lastId = Number(last.id);
 
     return isNaN(lastId) ? 1 : lastId + 1;
@@ -82,7 +106,7 @@ export async function getAsset(id: number | string): Promise<Asset | null> {
 }
 
 /* =========================================================
-    🔹 Obtener todos
+    🔹 Obtener todos (Carga única)
 ========================================================= */
 export async function getAllAssets(): Promise<Asset[]> {
   try {
