@@ -3,6 +3,11 @@ import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Keyboa
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useAddAsset, STATES } from "../hooks/useAddAsset";
+
+// 1. IMPORTACIONES SOLICITADAS
+import { saveLog } from "../services/logsService";
+import { useUser } from "../context/UserContext";
+
 // Importamos tus estilos globales y colores
 import { COLORS } from '../styles/theme'; 
 import { globalStyles } from '../styles/globalStyles';
@@ -34,11 +39,33 @@ const InputField = ({ label, value, error, onPress, children, disabled }: any) =
 );
 
 export default function AddAsset() {
+  const { user } = useUser(); // Obtenemos el usuario del contexto
+  
   const {
     asset, categories, locations, errors, loading, totalAssets,
     pick, setPick, showDP, setShowDP, fadeAnim, isEditing, canEditAdminFields,
     handleChange, handleSave, navigation, assetId
   } = useAddAsset();
+
+  // Función envolvente para manejar el guardado y el log
+  const onSaveWithLog = async () => {
+    // Ejecutamos el guardado
+    await handleSave(); 
+    
+    // Si el código llega aquí es porque no hubo errores críticos en handleSave
+    // Verificamos si hay errores de validación en el objeto 'errors' antes de loguear
+    // (Esto es opcional si handleSave ya maneja la navegación hacia afuera)
+    if (Object.keys(errors).length === 0) {
+      const actionMessage = assetId 
+        ? `Editó el activo "${asset.nombre}"` 
+        : `Creó el activo "${asset.nombre}"`;
+
+      await saveLog(
+        user?.name || "Usuario",
+        actionMessage
+      );
+    }
+  };
 
   return (
     <KeyboardAvoidingView 
@@ -59,7 +86,7 @@ export default function AddAsset() {
         keyboardShouldPersistTaps="always"
         showsVerticalScrollIndicator={false}
       >
-        {/* INDICADOR DE TOTAL USANDO SURFACE Y PRIMARY */}
+        {/* INDICADOR DE TOTAL */}
         <View style={[globalStyles.card, globalStyles.rowBetween, { marginBottom: 20 }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <View style={styles.iconCircle}>
@@ -156,7 +183,7 @@ export default function AddAsset() {
           <TouchableOpacity 
             activeOpacity={0.8}
             style={[styles.btn, loading && { opacity: 0.6 }]} 
-            onPress={handleSave} 
+            onPress={onSaveWithLog} // Usamos la nueva función con log
             disabled={loading}
           >
             {loading ? (
@@ -207,7 +234,7 @@ export default function AddAsset() {
 
 const styles = StyleSheet.create({
   header: { 
-    backgroundColor: COLORS.secondary, // Cambiado a casi negro/azul pizarra oscuro
+    backgroundColor: COLORS.secondary, 
     paddingTop: Platform.OS === 'ios' ? 60 : 50, 
     paddingBottom: 25, 
     paddingHorizontal: 20, 
@@ -252,7 +279,7 @@ const styles = StyleSheet.create({
   iE: { borderColor: COLORS.error, backgroundColor: '#FEF2F2' }, 
   fE: { color: COLORS.error, fontSize: 11, marginTop: 5, fontWeight: '500', marginLeft: 4 },
   btn: { 
-    backgroundColor: COLORS.accent, // Botón con el color azul brillante de interacción
+    backgroundColor: COLORS.accent, 
     paddingVertical: 16, 
     borderRadius: 12, 
     marginTop: 15, 

@@ -10,7 +10,7 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons"; // Para los iconos
+import { Ionicons } from "@expo/vector-icons";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../services/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
@@ -22,8 +22,10 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  
+  // 1️⃣ Estado para mostrar / ocultar contraseña
+  const [showPassword, setShowPassword] = useState(false);
 
-  // A) Función para traducir errores de Firebase
   const getFriendlyErrorMessage = (errorCode: string) => {
     switch (errorCode) {
       case "auth/invalid-email":
@@ -42,7 +44,6 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
-    // D) Validar formato del email antes del login
     if (!email || !password) {
       Alert.alert("Campos incompletos", "Por favor, llena todos los campos.");
       return;
@@ -56,14 +57,12 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
-
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const uid = userCredential.user.uid;
-
       const userDoc = await getDoc(doc(db, "usuarios", uid));
 
       if (!userDoc.exists()) {
-        Alert.alert("Error de Perfil", "El usuario no tiene un perfil asignado en la base de datos.");
+        Alert.alert("Error de Perfil", "El usuario no tiene un perfil asignado.");
         return;
       }
 
@@ -76,7 +75,6 @@ export default function LoginScreen() {
       });
 
     } catch (error: any) {
-      // A) Mostrar errores traducidos
       const message = getFriendlyErrorMessage(error.code);
       Alert.alert("Error de inicio de sesión", message);
     } finally {
@@ -85,7 +83,6 @@ export default function LoginScreen() {
   };
 
   return (
-    // E) KeyboardAvoidingView para evitar que el teclado tape los inputs
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
@@ -94,7 +91,6 @@ export default function LoginScreen() {
         <Ionicons name="lock-closed-outline" size={80} color="#1E88E5" style={styles.logo} />
         <Text style={styles.title}>Bienvenido</Text>
 
-        {/* C) Iconos visuales en los inputs */}
         <View style={styles.inputContainer}>
           <Ionicons name="mail-outline" size={20} color="#666" style={styles.icon} />
           <TextInput
@@ -108,19 +104,28 @@ export default function LoginScreen() {
           />
         </View>
 
+        {/* 2️⃣ Input de contraseña modificado */}
         <View style={styles.inputContainer}>
           <Ionicons name="key-outline" size={20} color="#666" style={styles.icon} />
+
           <TextInput
             placeholder="Contraseña"
             style={styles.input}
-            secureTextEntry
+            secureTextEntry={!showPassword} // Dinámico según el estado
             value={password}
             onChangeText={setPassword}
             editable={!loading}
           />
+
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+            <Ionicons
+              name={showPassword ? "eye-off-outline" : "eye-outline"}
+              size={22}
+              color="#666"
+            />
+          </TouchableOpacity>
         </View>
 
-        {/* B) Botón deshabilitado con opacidad mientras carga */}
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleLogin}
@@ -165,7 +170,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 16,
     paddingHorizontal: 14,
-    // Sombra para mejor visualización
     elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
