@@ -13,6 +13,10 @@ export interface Asset {
   fechaAdquisicion: string;
   fechaRegistro?: string;
 
-  costoInicial?: number | string;        // ← FIX
-  depreciacionAnual?: number | string;   // ← FIX
+  costoInicial?: number | string;
+  depreciacionAnual?: number | string;
+
+  // Nuevos campos de asignación
+  assignedUserId?: string | null;
+  assignedUserName?: string;
 }

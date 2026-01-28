@@ -4,25 +4,39 @@ import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/nativ
 import { addAsset, getAsset, getAllAssets } from "../api/assets";
 import { getCategories } from "../api/categories";
 import { getLocations } from "../api/locations";
+import { getUsers, createUserPlaceholder } from "../api/users"; // Importamos la nueva función
 import { useUser } from "../context/UserContext";
 import { Asset } from "../types/Asset";
 
 export const STATES = ["Activo", "En mantenimiento", "Baja"];
 
 export const initialState: Asset = {
-  id: 0, nombre: "", categoria: "", estado: "", ubicacion: "", descripcion: "", observacion: "",
-  fechaAdquisicion: new Date().toISOString().split("T")[0], fechaRegistro: new Date().toISOString(),
-  costoInicial: undefined, depreciacionAnual: undefined, 
+  id: 0,
+  nombre: "",
+  categoria: "",
+  estado: "",
+  ubicacion: "",
+  descripcion: "",
+  observacion: "",
+  fechaAdquisicion: new Date().toISOString().split("T")[0],
+  fechaRegistro: new Date().toISOString(),
+  costoInicial: undefined,
+  depreciacionAnual: undefined,
   cantidad: 1,
+  assignedUserId: null,
+  assignedUserName: "",
 };
 
 export const useAddAsset = () => {
-  const route = useRoute<any>(), navigation = useNavigation<any>(), { assetId } = route.params || {};
+  const route = useRoute<any>(), 
+        navigation = useNavigation<any>(), 
+        { assetId } = route.params || {};
   const { user } = useUser();
   
   const [asset, setAsset] = useState<Asset>(initialState);
   const [categories, setCategories] = useState<string[]>([]);
   const [locations, setLocations] = useState<string[]>([]);
+  const [users, setUsers] = useState<any[]>([]); 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [totalAssets, setTotalAssets] = useState<number | null>(null);
@@ -62,6 +76,7 @@ export const useAddAsset = () => {
   useEffect(() => {
     getCategories().then(data => setCategories(data.map((c: any) => c.name)));
     getLocations().then(data => setLocations(data.map((l: any) => l.name)));
+    getUsers().then(setUsers);
     getAllAssets().then(all => setTotalAssets(all.length));
     
     if (assetId) { 
@@ -88,11 +103,20 @@ export const useAddAsset = () => {
 
     setLoading(true);
     try {
+      // --- LÓGICA OPCIONAL PRO: Crear usuario si no existe ---
+      let assignedId = asset.assignedUserId;
+      if (!assignedId && asset.assignedUserName) {
+        // Si hay nombre pero no ID, creamos un placeholder en la DB de usuarios
+        assignedId = await createUserPlaceholder(asset.assignedUserName);
+      }
+
       const toSave = { 
         ...asset, 
+        assignedUserId: assignedId || null,
+        assignedUserName: asset.assignedUserName || "",
         cantidad: Number(asset.cantidad) || 1,
         costoInicial: Number(asset.costoInicial), 
-        depreciacionAnual: asset.depreciacionAnual ? Number(asset.depreciacionAnual) : 0 
+        depreciacionAnual: asset.depreciacionAnual ? Number(asset.depreciacionAnual) : 0,
       };
       
       await addAsset(toSave);
@@ -107,15 +131,21 @@ export const useAddAsset = () => {
         } else {
           setAsset(initialState);
           setErrors({});
+          // Refrescamos usuarios por si se creó uno nuevo
+          getUsers().then(setUsers);
           getAllAssets().then(all => setTotalAssets(all.length));
         }
       });
 
-    } catch (e) { console.log(e); } finally { setLoading(false); }
+    } catch (e) { 
+      console.log("Error al guardar:", e); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   return {
-    asset, setAsset, categories, locations, errors, loading, totalAssets,
+    asset, setAsset, categories, locations, users, errors, loading, totalAssets,
     pick, setPick, showDP, setShowDP, fadeAnim, isEditing, canEditAdminFields,
     handleChange, handleSave, navigation, assetId
   };

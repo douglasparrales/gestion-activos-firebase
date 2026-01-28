@@ -4,7 +4,6 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useAddAsset, STATES } from "../hooks/useAddAsset";
 
-// 1. IMPORTACIONES SOLICITADAS
 import { saveLog } from "../services/logsService";
 import { useUser } from "../context/UserContext";
 
@@ -39,29 +38,24 @@ const InputField = ({ label, value, error, onPress, children, disabled }: any) =
 );
 
 export default function AddAsset() {
-  const { user } = useUser(); // Obtenemos el usuario del contexto
+  const { user: currentUser } = useUser(); // Usuario logueado para el log
   
   const {
-    asset, categories, locations, errors, loading, totalAssets,
+    asset, categories, locations, users, errors, loading, totalAssets,
     pick, setPick, showDP, setShowDP, fadeAnim, isEditing, canEditAdminFields,
     handleChange, handleSave, navigation, assetId
   } = useAddAsset();
 
-  // Función envolvente para manejar el guardado y el log
   const onSaveWithLog = async () => {
-    // Ejecutamos el guardado
     await handleSave(); 
     
-    // Si el código llega aquí es porque no hubo errores críticos en handleSave
-    // Verificamos si hay errores de validación en el objeto 'errors' antes de loguear
-    // (Esto es opcional si handleSave ya maneja la navegación hacia afuera)
     if (Object.keys(errors).length === 0) {
       const actionMessage = assetId 
         ? `Editó el activo "${asset.nombre}"` 
         : `Creó el activo "${asset.nombre}"`;
 
       await saveLog(
-        user?.name || "Usuario",
+        currentUser?.name || "Usuario",
         actionMessage
       );
     }
@@ -72,7 +66,6 @@ export default function AddAsset() {
         style={globalStyles.screen} 
         behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      {/* HEADER AJUSTADO AL TEMA */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={COLORS.white} />
@@ -86,7 +79,6 @@ export default function AddAsset() {
         keyboardShouldPersistTaps="always"
         showsVerticalScrollIndicator={false}
       >
-        {/* INDICADOR DE TOTAL */}
         <View style={[globalStyles.card, globalStyles.rowBetween, { marginBottom: 20 }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <View style={styles.iconCircle}>
@@ -180,10 +172,38 @@ export default function AddAsset() {
             />
           </InputField>
 
+          {/* --- SECCIÓN DE ASIGNACIÓN --- */}
+          <InputField 
+            label="Asignado a (Usuario)"
+            value={asset.assignedUserName}
+            onPress={() => setPick({
+              visible: true,
+              title: "Seleccionar Usuario",
+              data: users.map(u => u.name),
+              field: "assignedUserName"
+            })}
+          />
+          <Text style={{ marginBottom: 15, color: COLORS.textMuted, fontSize: 12, marginLeft: 4 }}>
+            Si no existe en la lista, escriba el nombre abajo
+          </Text>
+
+          <InputField label="Asignado a (Manual)">
+            <TextInput 
+              style={styles.in}
+              value={asset.assignedUserName}
+              onChangeText={v => {
+                handleChange("assignedUserName", v);
+                handleChange("assignedUserId", null);
+              }}
+              placeholder="Ej: Pedro López"
+            />
+          </InputField>
+          {/* ----------------------------- */}
+
           <TouchableOpacity 
             activeOpacity={0.8}
             style={[styles.btn, loading && { opacity: 0.6 }]} 
-            onPress={onSaveWithLog} // Usamos la nueva función con log
+            onPress={onSaveWithLog} 
             disabled={loading}
           >
             {loading ? (
@@ -213,12 +233,21 @@ export default function AddAsset() {
             <Text style={styles.mT}>{pick.title}</Text>
             <FlatList 
               data={pick.data} 
-              keyExtractor={(item) => item}
+              keyExtractor={(item, index) => index.toString()}
               showsVerticalScrollIndicator={false}
               renderItem={({ item }) => (
                 <TouchableOpacity 
                     style={styles.mI} 
-                    onPress={() => { handleChange(pick.field as any, item); setPick({ ...pick, visible: false }); }}
+                    onPress={() => {
+                      if (pick.field === "assignedUserName") {
+                        const selectedUser = users.find(u => u.name === item);
+                        handleChange("assignedUserName", selectedUser.name);
+                        handleChange("assignedUserId", selectedUser.id);
+                      } else {
+                        handleChange(pick.field as any, item);
+                      }
+                      setPick({ ...pick, visible: false });
+                    }}
                 >
                   <Text style={styles.mIText}>{item}</Text>
                   <Ionicons name="chevron-forward" size={16} color={COLORS.border} />
