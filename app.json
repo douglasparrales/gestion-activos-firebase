@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "gestion-activos",
-    "slug": "gestion-activos",
+    "name": "AssetOne",
+    "slug": "AssetOne",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
