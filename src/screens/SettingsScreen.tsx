@@ -14,6 +14,7 @@ import { signOut, createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../services/firebaseConfig";
 import { doc, setDoc } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
+import { Picker } from "@react-native-picker/picker"; // Importado Picker
 
 import { COLORS } from "../styles/theme";
 import { globalStyles } from "../styles/globalStyles";
@@ -23,9 +24,12 @@ import GlobalTextInput from "../components/GlobalTextInput";
 export default function SettingsScreen() {
     const { user, setUser } = useUser();
     const navigation = useNavigation();
+    
+    // States para el formulario
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [role, setRole] = useState("user"); // State del rol agregado
     const [loading, setLoading] = useState(false);
 
     const handleLogout = async () => {
@@ -37,21 +41,33 @@ export default function SettingsScreen() {
 
     const handleCreateUser = async () => {
         if (!name || !email || !password) return Alert.alert("Error", "Completa todos los campos");
+        
         try {
             setLoading(true);
             const cred = await createUserWithEmailAndPassword(auth, email, password);
+            
+            // Guardar con el rol seleccionado en el Picker
             await setDoc(doc(db, "usuarios", cred.user.uid), { 
                 name, 
                 email, 
-                role: "user", 
+                role, // Usando el estado dinámico
                 createdAt: new Date() 
             });
             
             Alert.alert("Éxito", `Usuario ${name} creado con éxito.`);
-            setName(""); setEmail(""); setPassword("");
+            
+            // Limpiar formulario
+            setName(""); 
+            setEmail(""); 
+            setPassword("");
+            setRole("user");
+            
         } catch (error: any) { 
+            console.error(error);
             Alert.alert("Error", "No se pudo crear el usuario."); 
-        } finally { setLoading(false); }
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     return (
@@ -95,6 +111,7 @@ export default function SettingsScreen() {
                     <View style={{ marginTop: 10 }}>
                         <AppText bold size={12} color={COLORS.textSecondary} style={styles.groupLabel}>ADMINISTRACIÓN</AppText>
                         
+                        {/* Catálogos */}
                         <View style={globalStyles.card}>
                             <AppText bold size={14} color={COLORS.textPrimary} style={{ marginBottom: 15 }}>Catálogos Maestros</AppText>
                             <View style={styles.buttonGrid}>
@@ -116,8 +133,10 @@ export default function SettingsScreen() {
                             </View>
                         </View>
 
+                        {/* Formulario Nuevo Usuario */}
                         <View style={globalStyles.card}>
                             <AppText bold size={14} color={COLORS.textPrimary} style={{ marginBottom: 15 }}>Nuevo Usuario</AppText>
+                            
                             <GlobalTextInput 
                                 label="Nombre"
                                 placeholder="Ej. Juan Pérez"
@@ -139,6 +158,22 @@ export default function SettingsScreen() {
                                 onChangeText={setPassword}
                                 secureTextEntry
                             />
+
+                            {/* Selector de Rol */}
+                            <AppText bold size={12} color={COLORS.textSecondary} style={{ marginBottom: 5 }}>
+                                Rol del Usuario
+                            </AppText>
+                            <View style={styles.pickerContainer}>
+                                <Picker
+                                    selectedValue={role}
+                                    onValueChange={(itemValue) => setRole(itemValue)}
+                                    style={{ height: 50 }}
+                                >
+                                    <Picker.Item label="Usuario normal" value="user" />
+                                    <Picker.Item label="Administrador" value="admin" />
+                                </Picker>
+                            </View>
+
                             <TouchableOpacity 
                                 style={[styles.primaryButton, loading && { opacity: 0.7 }]} 
                                 onPress={handleCreateUser} 
@@ -200,6 +235,14 @@ const styles = StyleSheet.create({
         alignItems: 'center', 
         justifyContent: 'center', 
         marginTop: 10,
+    },
+    pickerContainer: { // Estilos del Picker agregados
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        borderRadius: 10,
+        marginBottom: 10,
+        overflow: "hidden",
+        backgroundColor: "#F8FAFC",
     },
     logoutButton: { 
         flexDirection: 'row', 
