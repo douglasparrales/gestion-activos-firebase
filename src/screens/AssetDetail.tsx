@@ -9,6 +9,7 @@ import QRCode from "react-native-qrcode-svg";
 import ViewShot from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
+import * as Print from "expo-print"; // Agregado para PDF
 
 // --- SISTEMA DE DISEÑO GLOBAL ---
 import { COLORS } from "../styles/theme";
@@ -73,6 +74,73 @@ export default function AssetDetail() {
     }
   };
 
+  const generarActaCustodio = async () => {
+    if (!asset) return;
+
+    const html = `
+    <html>
+    <body style="font-family: Arial; padding: 40px; color: #333;">
+      <h2 style="text-align:center;">ACTA DE ASIGNACIÓN DE ACTIVO</h2>
+      <hr style="border: 0.5px solid #eee;"/>
+  
+      <p style="margin-top: 20px;"><strong>Fecha:</strong> ${new Date().toLocaleDateString()}</p>
+      <p><strong>Responsable del Activo (Custodio):</strong> ${asset.assignedUserName || "No asignado"}</p>
+  
+      <h3 style="margin-top: 30px; color: ${COLORS.primary};">Información del Activo</h3>
+      <table border="1" cellspacing="0" cellpadding="12" style="width:100%; border-collapse: collapse; border: 1px solid #ddd;">
+        <tr style="background-color: #f9f9f9;">
+          <td style="width: 30%;"><strong>ID</strong></td>
+          <td>${asset.id}</td>
+        </tr>
+        <tr>
+          <td><strong>Nombre</strong></td>
+          <td>${asset.nombre}</td>
+        </tr>
+        <tr style="background-color: #f9f9f9;">
+          <td><strong>Categoría</strong></td>
+          <td>${asset.categoria}</td>
+        </tr>
+        <tr>
+          <td><strong>Ubicación</strong></td>
+          <td>${asset.ubicacion}</td>
+        </tr>
+        <tr style="background-color: #f9f9f9;">
+          <td><strong>Estado</strong></td>
+          <td>${asset.estado}</td>
+        </tr>
+        <tr>
+          <td><strong>Fecha de adquisición</strong></td>
+          <td>${asset.fechaAdquisicion}</td>
+        </tr>
+      </table>
+  
+      <br/><br/>
+      <table style="width:100%; margin-top:80px;">
+        <tr>
+          <td style="text-align:center;">
+            ___________________________<br/>
+            <strong>Custodio del Activo</strong><br/>
+            <span style="font-size: 12px; color: #666;">${asset.assignedUserName || "Firma Responsable"}</span>
+          </td>
+          <td style="text-align:center;">
+            ___________________________<br/>
+            <strong>Responsable de Inventarios</strong><br/>
+            <span style="font-size: 12px; color: #666;">Firma Autorizada</span>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+    `;
+
+    try {
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri);
+    } catch (error) {
+      Alert.alert("Error", "No se pudo generar el documento PDF");
+    }
+  };
+
   const handleDelete = () => {
     Alert.alert("Eliminar activo", "¿Estás seguro? Esta acción es irreversible.", [
       { text: "Cancelar", style: "cancel" },
@@ -98,7 +166,6 @@ export default function AssetDetail() {
     <View style={globalStyles.screen}>
       <StatusBar barStyle="light-content" />
       
-      {/* HEADER COHERENTE */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={26} color={COLORS.white} />
@@ -111,14 +178,14 @@ export default function AssetDetail() {
 
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         
-        {/* RESUMEN FINANCIERO (MODERNO) */}
+        {/* RESUMEN FINANCIERO */}
         <View style={styles.heroCard}>
             <AppText size={12} color="rgba(255,255,255,0.7)" style={{ textAlign: 'center' }}>VALOR ACTUAL ESTIMADO</AppText>
             <AppText bold size={34} color={COLORS.white} style={{ textAlign: 'center', marginVertical: 5 }}>
               {formatCurrency(dep.valorActual)}
             </AppText>
             <View style={styles.heroDivider} />
-            <View style={globalStyles.rowBetween}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
                 <View>
                     <AppText bold size={10} color="rgba(255,255,255,0.5)">COSTO INICIAL</AppText>
                     <AppText bold size={16} color={COLORS.white}>{formatCurrency(asset.costoInicial)}</AppText>
@@ -139,7 +206,8 @@ export default function AssetDetail() {
             <InfoItem label="ID de Activo" value={String(asset.id)} icon="finger-print-outline" />
             <InfoItem label="Categoría" value={asset.categoria} icon={CATEGORY_ICONS[asset.categoria] || "cube-outline"} />
             <InfoItem label="Estado" value={asset.estado} icon="shield-checkmark-outline" isStatus />
-            <InfoItem label="Ubicación" value={asset.ubicacion} icon="location-outline" noBorder />
+            <InfoItem label="Ubicación" value={asset.ubicacion} icon="location-outline" />
+            <InfoItem label="Asignado a" value={asset.assignedUserName} icon="person-outline" noBorder />
         </View>
 
         <View style={styles.sectionHeader}>
@@ -182,6 +250,11 @@ export default function AssetDetail() {
                 <AppText bold color={COLORS.white} style={{ marginLeft: 10 }}>Editar Información</AppText>
             </TouchableOpacity>
 
+            <TouchableOpacity style={styles.btnShare} onPress={generarActaCustodio}>
+              <Ionicons name="document-text-outline" size={20} color={COLORS.secondary} />
+              <AppText bold color={COLORS.secondary} style={{ marginLeft: 10 }}>Generar Acta de Custodio (PDF)</AppText>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.btnShare} onPress={imprimirQR}>
                 <Ionicons name="share-social-outline" size={20} color={COLORS.secondary} />
                 <AppText bold color={COLORS.secondary} style={{ marginLeft: 10 }}>Compartir Etiqueta QR</AppText>
@@ -197,7 +270,6 @@ export default function AssetDetail() {
   );
 }
 
-// Sub-componente InfoItem optimizado
 const InfoItem = ({ label, value, icon, noBorder, isStatus }: any) => (
     <View style={[styles.infoRow, noBorder && { borderBottomWidth: 0 }]}>
         <View style={styles.iconCircle}>
@@ -206,7 +278,7 @@ const InfoItem = ({ label, value, icon, noBorder, isStatus }: any) => (
         <View style={{ flex: 1, marginLeft: 12 }}>
             <AppText bold size={10} color={COLORS.textMuted}>{label.toUpperCase()}</AppText>
             <AppText bold={isStatus} size={15} color={isStatus ? (value?.toLowerCase().includes('activo') ? '#10B981' : COLORS.error) : COLORS.textPrimary}>
-                {value || "—"}
+                {value || "Sin asignar"}
             </AppText>
         </View>
     </View>
@@ -226,7 +298,6 @@ const styles = StyleSheet.create({
   },
   backButton: { width: 40, height: 40, justifyContent: 'center' },
   scrollContainer: { paddingHorizontal: 20, paddingBottom: 60 },
-
   heroCard: { 
     backgroundColor: COLORS.primary, 
     borderRadius: 24, 
@@ -238,7 +309,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12
   },
   heroDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 15 },
-
   sectionHeader: { marginTop: 25, marginBottom: 10, paddingLeft: 5 },
   infoRow: { 
     flexDirection: 'row', 
@@ -255,7 +325,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
-
   qrSection: { alignItems: "center", marginVertical: 30 },
   qrBox: { 
     backgroundColor: COLORS.white, 
@@ -274,7 +343,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F1F5F9',
   },
-
   actionContainer: { marginTop: 10, gap: 12 },
   btnEdit: { 
     backgroundColor: COLORS.secondary, 
